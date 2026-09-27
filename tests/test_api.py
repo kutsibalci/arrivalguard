@@ -418,3 +418,28 @@ def test_subscription_ends_after_case_deleted_is_acknowledged(client):
     assert r.status_code == 200 and r.json()["case_id"] is None
     other = ce("sub-gone", GEOFENCE_ENTERED, ce_id="gone-2")
     assert client.post("/webhooks/geofence", json=other, headers=AUTH).status_code == 404
+
+
+# ------------------------------------------------------------------ canlı Nokia bulguları (27.09.2026)
+def test_roaming_event_with_mcc_country_code_is_resolved_by_country_name(client):
+    """Nokia roaming CloudEvent'i countryCode'u MCC olarak gönderir (TR → 286); countryName (ISO) esas alınır."""
+    case, eta = mk(client)
+    ev = ce(case["subscriptions"]["roaming:roaming-on"], ROAMING_ON, at=eta, ce_id="mcc", countryCode=286, countryName=["TR"])
+    out = client.post("/webhooks/roaming", json=ev, headers=AUTH).json()
+    assert out["case"]["state"] != "waiting"
+    assert any(t["event"] == "roaming_on" and t["decision"] == "arrival" for t in out["case"]["timeline"])
+    assert not any("Beklenmeyen roaming" in a["title"] for a in out["case"]["alerts"])
+
+
+def test_silence_before_arrival_is_expected_and_does_not_carry_over(client, ctx):
+    """Uçuştaki hasta ulaşılamaz: varıştan önce alarm yok; inişte sayaç sıfırdan başlar."""
+    case, eta = mk(client)
+    before = ce(case["subscriptions"]["reachability:disconnected"], REACHABILITY_DISCONNECTED, at=eta - timedelta(hours=3), ce_id="fly")
+    r = client.post("/webhooks/reachability", json=before, headers=AUTH).json()
+    assert r["entry"]["rule"] == "unreachable.before_arrival"
+    ctx.run_scheduler_once(eta - timedelta(hours=1))
+    stored = ctx.store.get_case(case["id"])
+    assert stored.state == "waiting" and stored.unreachable_since is None
+    assert not any(a["level"] == "alarm" for a in stored.alerts)
+    arrive(client, case, eta)
+    assert ctx.store.get_case(case["id"]).unreachable_since is None

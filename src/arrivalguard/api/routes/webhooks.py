@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Body, Depends, Header, HTTPException
 
 from ...nac_client.privacy import mask_phone
+from ...rules.countries import resolve_country
 from ..security import check_webhook_token, get_ctx
 
 log = logging.getLogger("arrivalguard.webhooks")
@@ -80,12 +81,14 @@ def webhook_roaming(ev: dict = Body(...), authorization: str | None = Header(def
                     "note": "Cihaz ev şebekesine döndü — vaka akışını değiştirmez."}
         if not (etype.endswith("roaming-on") or etype.endswith("roaming-change-country") or etype.endswith("roaming-status")):
             raise HTTPException(400, {"code": "UNSUPPORTED_TYPE", "message": f"desteklenmeyen CloudEvent tipi: {etype}"})
-        country = data.get("countryCode") or data.get("country")
+        # Nokia CloudEvent'lerinde countryCode = MCC (HU → 216), itinerary ise E.164 (HU → 36): countryName (ISO) esas alınır
+        country = resolve_country(data.get("countryCode") or data.get("country"), data.get("countryName"))
         source = "webhook"
         if country is None and case.patient_phone:
             # roaming-on olayı ülke taşımayabilir → anlık roaming sorgusuyla tamamla
             r = ctx.facade.call("roaming", case.patient_phone)
-            country = (r.data or {}).get("countryCode") if isinstance(r.data, dict) else None
+            rd = r.data if isinstance(r.data, dict) else {}
+            country = resolve_country(rd.get("countryCode"), rd.get("countryName"))
             source = f"webhook+poll({r.source})"
         entry = ctx.handle(case, {"type": "roaming_on", "country": country, "source": source}, at)
         return {"ok": True, "case_id": case.id, "entry": entry, "case": case.to_dict()}

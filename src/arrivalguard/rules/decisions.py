@@ -169,6 +169,10 @@ def assess_unreachable(case_state: str, first_contact_done: bool, minutes_unreac
     ]
     if case_state in ("closed",):
         return Decision("lower", 0.0, "unreachable.case_closed", ex, [], {"note": "Vaka kapalı — önemsiz.", "level": "lower"})
+    if case_state in ("pending_consent", "waiting"):
+        # Varıştan önce (uçuşta, telefon kapalı) sessizlik beklenen durumdur; alarm ancak varıştan sonra anlamlıdır
+        return Decision("lower", 0.0, "unreachable.before_arrival", ex, [],
+                        {"note": "Varıştan ÖNCE sessizlik beklenir (uçuş, telefon kapalı) — alarm yok.", "level": "lower"})
     if not first_contact_done:
         ex[1].triggered = True
         if minutes_unreachable >= cfg.unreachable_before_contact_alert_min:

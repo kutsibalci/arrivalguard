@@ -12,7 +12,7 @@
 | Device Reachability Status (anlık) | `POST /device-status/device-reachability-status/v1/retrieve` | Olay verisi eksikse anlık sorgu | ✅ 200 · 145 ms → ✅ 200 (27.09) | |
 | SIM Swap | `POST passthrough/camara/v1/sim-swap/sim-swap/v0/check` (+ `/retrieve-date`) | **Bütünlük kapısı** (`maxAge` = `AG_SIM_SWAP_FREEZE_WINDOW_H`) | ✅ 200 · 141 ms / 130 ms → ✅ 200 (27.09) | Passthrough → `Authorization: Bearer` |
 | Number Verification | `POST passthrough/camara/v1/number-verification/number-verification/v2/verify` | **Sürücünün kendi cihazı** kayıtlı hatta mı | ⚠ 401 `Authorization header is missing` | Beklenen durum: çağrı cihazın 3-legged OIDC token'ıyla yapılır. Akış `nac_client/oidc.py`'de. OIDC keşfi (`/.well-known/openid-configuration` + client credentials) canlıda ✅ 200 (27.09); gerçek telefonla henüz denenmedi (bkz. [mimari §6](architecture.md#6-sürücü-doğrulama-iki-aşamalı-model)) |
-| Geofencing Subscriptions | `POST /geofencing-subscriptions/v0.3/subscriptions`, `GET/DELETE …/{id}` | Havalimanı, koridor, klinik | ✅ 200 · 228 ms (abonelik yaşam döngüsü) | Olay teslimatı canlıda doğrulanmadı; simüle cihaz hareket etmiyor ([fizibilite](live-feasibility.md)) |
+| Geofencing Subscriptions | `POST /geofencing-subscriptions/v0.3/subscriptions`, `GET/DELETE …/{id}` | Havalimanı, koridor, klinik | ✅ 200 · 228 ms (abonelik yaşam döngüsü) | Canlıda `area-entered` olayları teslim edildi ve işlendi (27.09). Olaylar yapay: simüle cihaz hareket etmiyor, gerçek güzergâh mantığı doğrulanmadı |
 | Location Verification | `POST /location-verification/v1/verify` | Varışta tek seferlik "buluşma noktasında mı?" hükmü | ✅ 200 · 152 ms → ✅ 200 (27.09) | Simüle cihaz Budapeşte'de sabit; sonda bu koordinatı kullanır |
 | Consent Info | `POST passthrough/camara/v1/consent-info/consent-info/v0.1/retrieve` | Rıza sonrası operatör tarafı işleme izni | ⚠ 422 `purpose` biçimi → ⚠ 422 `requestCaptureUrl` eksik → ✅ 200 (27.09) | ✅ **Düzeltildi:** `purpose=dpv:ServiceProvision` (W3C DPV) + zorunlu `requestCaptureUrl=false` |
 
@@ -32,6 +32,8 @@ Bilinçli olarak kullanılmayanlar:
 - [x] networkascode.nokia.io kaydı, SIMULATOR planı _(22.08.2026)_
 - [x] Okuma uçları canlıda 200 döndü: roaming, reachability, SIM Swap, Location Verification _(09.09.2026)_
 - [x] Tek tipli roaming ve reachability abonelikleri canlıda `status=ACTIVE` _(27.09.2026; `sinkCredential.accessTokenExpiresUtc` zorunlu)_
+- [x] Roaming CloudEvent'lerinde `countryCode` MCC'dir (HU → 216); ülke `countryName` (ISO) ile çözülüyor _(27.09.2026)_
+- [x] Yalnızca canlı olaylarla baştan sona vaka: varış → SIM Swap kapısı → reachability → geofence → kapanış _(27.09.2026)_
 - [x] Roaming ve reachability CloudEvent'leri public sink'e `Authorization: Bearer <WEBHOOK_TOKEN>` ile ulaştı, vaka ajanı işledi _(27.09.2026)_
 - [x] Consent Info `dpv:ServiceProvision` + `requestCaptureUrl` ile 200 _(27.09.2026)_
 - [x] Number Verification OIDC keşfi canlıda 200 _(27.09.2026)_

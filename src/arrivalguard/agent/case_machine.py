@@ -30,6 +30,7 @@ from typing import Any
 from ..nac_client.privacy import hash_phone, mask_phone, normalize_phone
 from ..rules import Config, Decision
 from ..rules import decisions as R
+from ..rules.countries import resolve_country
 from .messages import COUNTRY_NAMES, render
 
 STATES = ["pending_consent", "waiting", "arrived", "frozen", "released", "contacted", "in_transit", "escalated",
@@ -439,6 +440,8 @@ def _arrive(case: Case, now: datetime, cfg: Config, nac, d: Decision | None, eve
     frm = _set_state(case, "arrived")
     case.arrived_at = _iso(now)
     case.last_move_at = _iso(now)
+    case.unreachable_since = None  # şebekeye bağlandı: uçuştaki sessizlik varış sonrası sayaca taşınmaz
+    case.tick_marks.pop("unreachable", None)
     _record(case, now, event_name, frm, "arrived", d, note="" if d else "Koordinatör varışı teyit etti.", extra=_src(ev))
     # isteğe bağlı buluşma noktası spot kontrolü (Location Verification — koordinat değil, hüküm)
     ap = case.zones.get("airport")
@@ -656,6 +659,9 @@ def _h_reachability(case: Case, ev: Event, now: datetime, cfg: Config, nac) -> d
         case.unreachable_since = None
         case.tick_marks.pop("unreachable", None)
         return _record(case, now, "reachability_change", frm, case.state, None, note="Cihaz yeniden ulaşılabilir.", extra=_src(ev))
+    if case.state in ("pending_consent", "waiting"):
+        d = R.assess_unreachable(case.state, False, 0.0, cfg)  # varış öncesi: kayıt, sayaç başlamaz
+        return _record(case, now, "reachability_change", frm, case.state, d, extra=_src(ev))
     if not case.unreachable_since:
         case.unreachable_since = _iso(now)
     minutes = (now - _dt(case.unreachable_since)).total_seconds() / 60
@@ -753,7 +759,7 @@ def _tick_waiting(case: Case, ev: Event, now: datetime, cfg: Config, nac) -> dic
     if cfg.arrival_overdue_poll and nac is not None and case.patient_phone:
         r = _nac(nac, "roaming", case.patient_phone)
         if r.data:
-            cc = r.data.get("countryCode")
+            cc = resolve_country(r.data.get("countryCode"), r.data.get("countryName"))
             d.explain.append(R.Explain("roaming.poll", {"roaming": r.data.get("roaming"), "countryCode": cc}, 0.4,
                                        "Anlık roaming sorgusu (webhook kaybına karşı yedek yol)", source=r.source, triggered=True))
             in_dest = bool(r.data.get("roaming")) and R.country_code(cc) == R.country_code(case.itinerary.get("destination_country"))

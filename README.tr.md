@@ -13,9 +13,9 @@ Terimsiz anlatım (sorun, pazar, kim öder, dürüst zayıf noktalar): [`docs/co
 
 | | |
 |---|---|
-| ✅ **Yapıldı** | Vaka ajanı, API, koordinatör konsolu, rıza sayfası (TR/EN/AR), sürücü doğrulama sayfası, yerel Nokia simülatörü, Docker, CI. 149 test, %90 kapsam |
-| ✅ **Canlı Nokia'da doğrulandı** (27.09.2026) | Şebeke sorguları, rıza kontrolü, abonelikler ve **gerçek olay teslimatı**: Nokia roaming ve ulaşılabilirlik olaylarını ArrivalGuard'a gönderdi, vaka ajanı da bunları işledi |
-| ⏸ **Nerede durduk** | Kalan iki kontrol, Nokia'nın ücretsiz *Simulator* planının verdiğinden fazlasını istiyor: **bölge giriş-çıkış olayları** (simüle cihazlar hiç hareket etmiyor) ve **gerçek telefonda sürücü doğrulama** (desteklenen bir operatörde gerçek SIM gerekiyor) |
+| ✅ **Yapıldı** | Vaka ajanı, API, koordinatör konsolu, rıza sayfası (TR/EN/AR), sürücü doğrulama sayfası, yerel Nokia simülatörü, Docker, CI. 152 test, %90 kapsam |
+| ✅ **Canlı Nokia'da doğrulandı** (27.09.2026) | Şebeke sorguları, rıza kontrolü, abonelikler ve **yalnızca gerçek Nokia olaylarıyla baştan sona bir vaka**: varış → SIM değişimi kapısı → ulaşılabilirlik → havalimanı, koridor ve klinik bölgeleri → vaka kapandı |
+| ⏸ **Nerede durduk** | Kalan iki kontrol, Nokia'nın ücretsiz *Simulator* planının verdiğinden fazlasını istiyor: **gerçek telefonda sürücü doğrulama** (desteklenen bir operatörde gerçek SIM gerekiyor) ve **gerçekten hareket eden bir cihazla yolculuk mantığı** (Nokia'nın simüle bölge olayları gerçek bir konumu yansıtmıyor) |
 
 Ayrıntılar: [Proje durumu](#proje-durumu).
 
@@ -23,7 +23,7 @@ Ayrıntılar: [Proje durumu](#proje-durumu).
 
 ```powershell
 py -m pip install -e ".[dev]"
-py -m pytest                                  # 149 test
+py -m pytest                                  # 152 test
 $env:PYTHON="py"; .\run.ps1 -Mode simulator   # demo: http://127.0.0.1:8000/demo · konsol: /console · API: /docs
 ```
 
@@ -76,14 +76,22 @@ Nokia Network as Code, ücretsiz *Simulator* planı, simüle cihaz `+99999991000
 | Consent Info (operatör tarafı rıza kontrolü) | ✅ 200 |
 | Number Verification OIDC keşfi (sürücü sayfasının operatöre yönlendirmesi) | ✅ 200 |
 | Bir vakanın açtığı 7 aboneliğin hepsi (2 roaming, 2 ulaşılabilirlik, 3 bölge) | ✅ ACTIVE |
-| **Olay teslimatı:** Nokia → public HTTPS tünel → webhook anahtarıyla `/webhooks/*` → vaka ajanı | ✅ roaming ve ulaşılabilirlik olayları teslim edildi ve işlendi |
+| **Olay teslimatı:** Nokia → public HTTPS tünel → webhook anahtarıyla `/webhooks/*` → vaka ajanı | ✅ roaming, ulaşılabilirlik ve bölge (area-entered) olayları teslim edildi ve işlendi |
+| **Canlı olaylarla baştan sona vaka:** roaming-on (Macaristan) → varış → SIM Swap kapısı sürücü bilgisini bekletti (Nokia bu cihaz için yakın zamanda SIM değişimi bildiriyor) → ulaşılabilirlik → havalimanı, koridor, klinik → vaka kapandı | ✅ her karar kurallarla uyumlu |
 | Temizlik: vaka bitince bütün aboneliklerin silinmesi | ✅ açıkta abonelik kalmadı |
 
-Canlı test, simülatörün gösteremeyeceği üç hata buldu. Üçü de düzeltildi, simülatör de artık aynı kuralları uyguluyor:
+Canlı test, ne simülatörün ne de birim testlerin gösterebileceği hatalar buldu. Hepsi düzeltildi, her birine regresyon testi
+eklendi ve simülatör artık Nokia'nın kurallarını uyguluyor:
 
 - Cihaz durumu abonelikleri her seferinde **tek olay tipi** kabul ediyor (422).
 - Consent Info, W3C DPV biçiminde bir `purpose` ve `requestCaptureUrl` alanı istiyor (422).
 - Webhook kimliğinin bir **son kullanma zamanı** (`accessTokenExpiresUtc`) olmalı; bu alan olmadan Nokia bütün abonelikleri reddetti (422).
+- **Nokia'nın kendi uçları farklı ülke kodu kullanıyor.** Anlık roaming sorgusu telefon kodunu döndürüyor (Macaristan = 36), roaming
+  bildirimleri ise mobil ülke kodunu (Macaristan = 216). Gerçek bir varış "beklenmeyen ülke" sanılıyordu. Ülke artık ikisinde de
+  bulunan ISO kodundan (`countryName: ["HU"]`) belirleniyor.
+- **Uçuştaki sessizlik alarm üretiyordu.** Hastanın telefonu uçuşta kapalıdır, ama varıştan önceki "ulaşılamıyor" durumu "ilk temastan
+  önce kayboldu" sayılıyor ve 5 dakika sonra alarma dönüşüyordu. Varış öncesi sessizlik artık beklenen durum, sayaç inişte başlıyor.
+- Silinmiş vakaların `subscription-ends` bildirimlerine 404 dönülüyordu (Nokia tekrar dener); artık kabul ediliyor.
 
 ### Nerede durduk, neden
 
@@ -91,7 +99,7 @@ Kalan iki kontrolün kodu yazıldı ve yerelde test edildi. Eksik olan, ücretsi
 
 | Henüz doğrulanmayan | Neden durduk | Ne gerekiyor |
 |---|---|---|
-| **Bölge giriş-çıkış olayları** (havalimanı, koridor, klinik) | Abonelikler canlıda kabul ediliyor, ama Nokia'nın simüle cihazları Budapeşte'de sabit bir noktada duruyor. Bu yüzden "bölgeye girdi/çıktı" olayı hiç oluşmuyor. Nokia kendi entegrasyon testlerinde de bu durumları aynı sebeple atlıyor. | Gerçekten hareket eden bir cihaz: Nokia'nın desteklediği bir şebekede gerçek SIM, ya da simülatöre hareket desteği |
+| **Gerçekten hareket eden cihazla yolculuk mantığı** (koridor dışı, hareketsizlik, "trafik mi, sorun mu?") | Bölge olayları canlıda teslim ediliyor, ama yapay: simüle cihaz Budapeşte'de dururken Nokia İstanbul'daki bölgelerimiz için "girdi" gönderdi. Bu, teslimatı ve işlenmeyi kanıtlıyor; gerçekten yolda olan bir hasta için yolculuk kararlarının doğru olduğunu kanıtlamıyor. | Nokia'nın desteklediği bir şebekede, gerçek bir güzergâhta hareket eden gerçek SIM |
 | **Gerçek telefonda sürücü doğrulama** | Number Verification hattı, telefonun kendi mobil veri oturumu üzerinden tanıyor. Ücretsiz plan yalnızca simüle numaraları kapsıyor, bu yüzden yönlendirme → kod → token → doğrulama zinciri gerçek bir telefonda çalıştırılamıyor. Sunucu tarafı (OIDC keşfi) canlıda zaten çalışıyor. | Desteklenen bir operatörde gerçek SIM ve ücretsiz planın ötesinde erişim |
 
 ### Üretime geçmek için gerekenler

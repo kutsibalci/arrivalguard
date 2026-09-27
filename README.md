@@ -13,9 +13,9 @@
 
 | | |
 |---|---|
-| ✅ **Built** | Full case agent, API, coordinator console, consent page (TR/EN/AR), driver verification page, local Nokia simulator, Docker, CI. 149 tests, 90% coverage |
-| ✅ **Verified on the live Nokia API** (27.09.2026) | Network queries, consent check, subscriptions, and **real event delivery**: Nokia sent roaming and reachability events to ArrivalGuard, and the case agent acted on them |
-| ⏸ **Where we stopped** | Two checks need more than Nokia's free *Simulator* plan offers: **geofencing events** (simulated devices never move) and **driver verification on a real phone** (needs a real SIM on a supported operator network) |
+| ✅ **Built** | Full case agent, API, coordinator console, consent page (TR/EN/AR), driver verification page, local Nokia simulator, Docker, CI. 152 tests, 90% coverage |
+| ✅ **Verified on the live Nokia API** (27.09.2026) | Network queries, consent check, subscriptions, and **a full case driven only by live Nokia events**: arrival → SIM-swap gate → reachability → airport, corridor and clinic areas → case closed |
+| ⏸ **Where we stopped** | Two checks need more than Nokia's free *Simulator* plan offers: **driver verification on a real phone** (needs a real SIM on a supported operator network) and **journey logic with a real moving device** (Nokia's simulated area events do not reflect a real position) |
 
 Details: [Project status](#project-status).
 
@@ -53,7 +53,7 @@ Deciding when to stay quiet is the hard part. Every decision is a pure function 
 
 ```bash
 pip install -e ".[dev]"
-pytest                                   # 149 tests
+pytest                                   # 152 tests
 ./run.sh simulator                       # Windows: $env:PYTHON="py"; .\run.ps1 -Mode simulator
 ```
 
@@ -135,14 +135,22 @@ Nokia Network as Code, free *Simulator* plan, simulated device `+99999991000`. R
 | Consent Info (operator-side consent check) | ✅ 200 |
 | Number Verification OIDC discovery (the driver page's redirect to the operator) | ✅ 200 |
 | All 7 subscriptions a case opens (2 roaming, 2 reachability, 3 geofence) | ✅ ACTIVE |
-| **Event delivery:** Nokia → public HTTPS tunnel → `/webhooks/*` with the sink Bearer token → case agent | ✅ roaming and reachability events delivered and processed |
+| **Event delivery:** Nokia → public HTTPS tunnel → `/webhooks/*` with the sink Bearer token → case agent | ✅ roaming, reachability and geofence (area-entered) events delivered and processed |
+| **End-to-end case on live events:** roaming-on (Hungary) → arrival → SIM Swap gate withheld pickup (Nokia reports a recent SIM change for this device) → reachability → airport, corridor, clinic → case closed | ✅ every decision matched the rules |
 | Cleanup: every subscription deleted when the case ends | ✅ no leftovers |
 
-Live testing found three bugs that the simulator could not have shown. All three are fixed, and the simulator now enforces the same rules:
+Live testing found bugs that neither the simulator nor the unit tests could have shown. All are fixed, each has a regression
+test, and the simulator now enforces Nokia's rules:
 
 - Device-status subscriptions accept exactly **one event type** each (422).
 - Consent Info needs a W3C DPV `purpose` and the `requestCaptureUrl` field (422).
 - The webhook credential needs an **expiry** (`accessTokenExpiresUtc`); without it Nokia rejected every subscription (422).
+- **Country codes differ between Nokia's own endpoints.** The instant roaming query returns the phone calling code
+  (Hungary = 36), but roaming events carry the mobile country code (Hungary = 216). A real arrival was read as
+  "unexpected country". The country is now taken from the ISO code (`countryName: ["HU"]`) that both carry.
+- **In-flight silence raised alarms.** A patient's phone is off during the flight, but "unreachable" before arrival counted as
+  "vanished before first contact" and escalated after 5 minutes. Silence before arrival is now expected and the timer starts at landing.
+- `subscription-ends` events for deleted cases were answered with 404, which invites retries; they are now acknowledged.
 
 ### Where we stopped, and why
 
@@ -150,7 +158,7 @@ The code for both remaining checks is written and tested locally. What is missin
 
 | Not yet verified | Why we stopped | What would unblock it |
 |---|---|---|
-| **Geofencing events** (airport, corridor, clinic) | Subscriptions are accepted live, but Nokia's simulated devices sit at a fixed point in Budapest, so an "entered/left area" event never happens. Nokia's own integration tests skip these cases for the same reason. | A device that actually moves: a real SIM on a network Nokia supports, or simulator support for movement |
+| **Journey logic with a real moving device** (off-corridor, stationary, "traffic or trouble?") | Geofence events are delivered live, but they are synthetic: Nokia sent "entered" for our Istanbul areas while the simulated device sits in Budapest. That proves delivery and handling, not that journey decisions are right for a patient who is really moving. | A real SIM on a network Nokia supports, travelling a real route |
 | **Driver verification on a real phone** | Number Verification recognises the line through the phone's own mobile-data session. The free plan covers only simulated numbers, so the full redirect → code → token → verify chain cannot run on a real handset. The server side (OIDC discovery) already works live. | A real SIM on a supported operator network, beyond the free plan |
 
 ### What it would take to go to production

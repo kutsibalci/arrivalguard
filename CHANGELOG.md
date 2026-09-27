@@ -14,6 +14,13 @@
 - **Nokia device-status subscriptions accept exactly one event type** (live 422, 09.09.2026). Every type now gets its
   own subscription: roaming-on, roaming-change-country, reachability-disconnected, reachability-data, plus 3 geofences.
   The simulator enforces the same rule.
+- **Country identity from ISO code.** Nokia's roaming events carry the mobile country code (Hungary = 216) while the
+  instant query returns the calling code (36); a real arrival was classified "unexpected country". Countries are now
+  resolved from `countryName` (ISO 3166-1) via an embedded table (`rules/countries.py`, generated from libphonenumber).
+- **No alarm for silence before arrival.** "Unreachable" while the case is `pending_consent`/`waiting` (patient in flight)
+  no longer escalates, and the unreachable timer is reset on arrival.
+- `subscription-ends` for a deleted case is acknowledged with 200 instead of 404. Webhooks log the event type and the
+  non-personal decision fields.
 - **Sink credentials carry an expiry.** Nokia requires `sinkCredential.accessTokenExpiresUtc` for `ACCESSTOKEN` (live 422,
   27.09.2026); it is set to the subscription expiry. With this fix, live delivery was verified end to end: 7 subscriptions
   ACTIVE, roaming and reachability CloudEvents delivered with the Bearer token and processed by the case agent.
