@@ -33,6 +33,8 @@ cloudflared tunnel --url http://127.0.0.1:8000     # → https://<rastgele>.tryc
 arrivalguard-probe --include-write --sink https://<rastgele>.trycloudflare.com/webhooks
 ```
 
+Nokia abonelik açarken sink adresinin DNS'te çözüldüğünü kontrol eder. Çözülmeyen bir adres `400 INVALID_SINK` ("Unresolvable callback hostname") döner, bu yüzden sahte bir adresle abonelik denenemez (27.09.2026).
+
 Webhook'lar `Authorization: Bearer $WEBHOOK_TOKEN` başlığıyla doğrulanır. Bu değer abonelik gövdesinde `sinkCredential` olarak Nokia'ya iletilir.
 
 ## 3. Üretim kontrol listesi
