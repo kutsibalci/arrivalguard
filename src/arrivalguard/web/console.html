@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArrivalGuard Konsol</title>
+<link rel="stylesheet" href="/static/base.css">
+<style>
+  .layout{display:grid;grid-template-columns:minmax(320px,1fr) 1.4fr;gap:16px}@media (max-width:1000px){.layout{grid-template-columns:1fr}}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .pill.bad{border-color:var(--bad);color:var(--bad)}.pill.warn{border-color:var(--warn);color:var(--warn)}.pill.ok{border-color:var(--ok);color:var(--ok)}
+  .alert{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0;font-size:13px;background:#121a29}
+  .alert.alarm{border-color:rgba(239,68,68,.65);background:rgba(239,68,68,.08)}.alert.warn{border-color:rgba(245,158,11,.55)}.alert.acked{opacity:.55}
+  .alert .hd{display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .msg{border-left:3px solid var(--line);padding:4px 8px;margin:6px 0;font-size:13px}
+  .msg .t{color:var(--muted);font-size:11px;font-family:ui-monospace,Consolas,monospace}
+  .msg[dir="rtl"]{text-align:right}
+  .tl{max-height:320px;overflow:auto}.tl .ev{cursor:pointer}
+  .actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .actions .card{padding:12px;margin:0}
+  details.card summary{font-weight:600;cursor:pointer}
+  h3 .muted{color:var(--muted);font-weight:400;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>ArrivalGuard — Koordinatör Konsolu</h1>
+    <div class="sub">Açık vakalar, uyarılar ve aksiyonlar · her aksiyon audit'e aktörüyle yazılır · <span id="health"></span></div>
+  </div>
+  <div class="toolbar" style="margin:0"><a href="/demo" class="small" style="color:var(--accent)">Demo →</a><button class="ghost small" id="btnLogout">Anahtarı unut</button></div>
+</header>
+<main>
+  <details class="card" id="newCase">
+    <summary>Yeni vaka aç</summary>
+    <form id="caseForm" style="margin-top:12px">
+      <div class="row">
+        <label class="field">Hasta adı<input name="patient_name" required maxlength="120"></label>
+        <label class="field">Hasta telefonu (E.164)<input name="patient_phone" required placeholder="+447700900001"></label>
+        <label class="field">Dil<select name="language"><option value="en">English</option><option value="tr">Türkçe</option><option value="ar">العربية</option></select></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="field">Klinik<select name="clinic_id" id="clinicSel"></select></label>
+        <label class="field">Sürücü<select name="driver_id" id="driverSel"></select></label>
+        <label class="field">Hedef ülke kodu<input name="dest" type="number" value="90" required></label>
+        <label class="field">Varış (yerel saat)<input name="eta" type="datetime-local" required></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="field">Aktarma ülke kodu (ops.)<input name="transit" type="number" placeholder="974"></label>
+        <label class="field">Aktarma varışı (ops.)<input name="transit_eta" type="datetime-local"></label>
+        <label class="field">Aile adı (ops.)<input name="family_name"></label>
+        <label class="field">Aile telefonu (ops.)<input name="family_phone"></label>
+      </div>
+      <label class="small" style="display:block;margin-top:10px"><input type="checkbox" name="consent"> Hastanın açık rızası klinik formuyla alındı (işaretlenmezse hastaya rıza bağlantısı gönderilir)</label>
+      <div class="toolbar" style="margin:10px 0 0"><button type="submit">Vaka aç</button><span id="formMsg"></span></div>
+    </form>
+  </details>
+
+  <div class="layout" style="margin-top:16px">
+    <div class="card">
+      <h3>Vakalar <span class="muted" id="listInfo"></span></h3>
+      <div class="toolbar" style="margin:6px 0">
+        <select id="stateFilter" class="small"><option value="">Tüm durumlar</option></select>
+        <button class="ghost small" id="btnRefresh">Yenile</button>
+        <label class="small"><input type="checkbox" id="auto" checked> 10 sn'de bir</label>
+      </div>
+      <table class="list"><thead><tr><th>Hasta</th><th>Durum</th><th>Uyarı</th><th>Güncel</th></tr></thead><tbody id="rows"></tbody></table>
+    </div>
+    <div id="detail"><div class="card small">Soldan bir vaka seçin.</div></div>
+  </div>
+</main>
+<script src="/static/base.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const STATES = ['pending_consent', 'waiting', 'arrived', 'frozen', 'released', 'contacted', 'in_transit', 'escalated', 'closed', 'expired', 'declined', 'withdrawn'];
+const STATE_LVL = { frozen: 'bad', escalated: 'bad', expired: 'warn', pending_consent: 'warn', closed: 'ok', declined: 'warn', withdrawn: 'warn' };
+let selectedId = null, clinics = [], rows = [];
+
+STATES.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; $('stateFilter').appendChild(o); });
+
+function openAlerts(c) { return (c.alerts || []).filter(a => !a.acknowledged_at && a.level !== 'info').length; }
+
+async function loadList() {
+  const q = $('stateFilter').value ? '?state=' + encodeURIComponent($('stateFilter').value) : '';
+  try {
+    const cases = await api('/v1/cases' + q);
+    cases.sort((a, b) => openAlerts(b) - openAlerts(a) || (b.updated_at || '').localeCompare(a.updated_at || ''));
+    $('listInfo').textContent = `(${cases.length})`;
+    $('rows').innerHTML = cases.map(c => `<tr data-id="${esc(c.id)}" class="${c.id === selectedId ? 'sel' : ''}">
+      <td><b>${esc(c.patient.name)}</b><div class="small">${esc(c.patient.phone_masked || '')} · ${esc(c.id)}</div></td>
+      <td><span class="pill ${STATE_LVL[c.state] || ''}">${esc(c.state)}</span></td>
+      <td>${openAlerts(c) ? `<span class="pill bad">${openAlerts(c)}</span>` : '—'}</td>
+      <td class="small">${esc(hm(c.updated_at))}</td></tr>`).join('') || '<tr><td colspan="4" class="small">Vaka yok.</td></tr>';
+    document.querySelectorAll('#rows tr[data-id]').forEach(tr => { tr.onclick = () => select(tr.dataset.id); });
+    if (selectedId) await loadDetail();
+  } catch (e) { $('rows').innerHTML = `<tr><td colspan="4" class="err">${esc(e.message)}</td></tr>`; }
+}
+
+async function select(id) { selectedId = id; document.querySelectorAll('#rows tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.id === id)); await loadDetail(); }
+
+async function act(body) {
+  try { await api(`/v1/cases/${encodeURIComponent(selectedId)}/actions`, body); await loadList(); }
+  catch (e) { $('actMsg').textContent = e.message; $('actMsg').className = 'err'; }
+}
+
+async function loadDetail() {
+  let c;
+  try { c = await api('/v1/cases/' + encodeURIComponent(selectedId)); } catch (e) { $('detail').innerHTML = `<div class="card err">${esc(e.message)}</div>`; return; }
+  const clinic = clinics.find(x => x.id === c.clinic_id) || { drivers: [] };
+  const alerts = (c.alerts || []).slice().reverse().map(a => `<div class="alert ${esc(a.level)} ${a.acknowledged_at ? 'acked' : ''}">
+      <div class="hd"><b>${esc(a.title)}</b><span class="small">${esc(hm(a.t))}${a.budget ? ' · bütçe ' + esc(a.budget) : ''}
+      ${a.acknowledged_at ? ' · onaylayan ' + esc(a.acknowledged_by) : ` <button class="ghost small" data-ack="${esc(a.id)}">Onayla</button>`}</span></div>
+      <div class="small" style="margin-top:4px">${esc(a.note || '')}${a.confidence != null ? ' · güven ' + Math.round(a.confidence * 100) + '%' : ''}</div></div>`).join('') || '<div class="small">Uyarı yok.</div>';
+  const msgs = (c.messages || []).filter(m => m.to !== 'coordinator').map(m => `<div class="msg" ${m.lang === 'ar' ? 'dir="rtl"' : ''}>
+      <div class="t">${esc(hm(m.t))} · ${esc(m.to)} · ${esc(m.kind)} · ${esc(m.status)}${m.to_masked ? ' · ' + esc(m.to_masked) : ''}</div>${esc(m.text)}</div>`).join('') || '<div class="small">Mesaj yok.</div>';
+  const tl = (c.timeline || []).map((e, i) => `<div class="ev ${decisionLevel(e.decision)}" data-i="${i}"><b>${esc(hm(e.t))}</b> ${esc(e.event)}
+      <span class="small">${esc(e.from)} → ${esc(e.to)}${e.actor ? ' · ' + esc(e.actor) : ''}${e.source ? ' · ' + esc(e.source) : ''}</span>
+      ${e.decision ? badge(decisionLevel(e.decision) || 'info', e.decision) : ''}<div class="small">${esc(e.note || '')}</div></div>`).join('');
+  const terminal = ['closed', 'expired', 'declined', 'withdrawn'].includes(c.state);
+  const driverOpts = clinic.drivers.map(d => `<option value="${esc(d.id)}">${esc(d.name)} · ${esc(d.plate || '')}</option>`).join('');
+  $('detail').innerHTML = `
+    <div class="card">
+      <h3>${esc(c.patient.name)} <span class="pill ${STATE_LVL[c.state] || ''}">${esc(c.state)}</span> <span class="muted">${esc(c.id)}</span></h3>
+      <div class="kv">Klinik: <b>${esc(c.clinic_name)}</b> · Dil: <b>${esc(c.patient.language)}</b> · Rıza: <b>${esc(c.consent.status)}</b></div>
+      <div class="kv">Sürücü: <b>${esc(c.driver.name || '-')}</b> ${esc(c.driver.plate || '')} · cihaz doğrulaması: <b>${c.driver_verified_at ? hm(c.driver_verified_at) : 'yok'}</b> · buluşma kodu: <b>${c.meeting_code_issued ? 'gönderildi' : '—'}</b></div>
+      <div class="kv">Varış: <b>${esc(hm(c.arrived_at) || '—')}</b> · İlk temas: <b>${esc(hm(c.first_contact_at) || '—')}</b> · Eskalasyon: <b>${c.escalations_used}</b>${c.known_disruption ? ' · yol kapanması: <b>' + esc(c.known_disruption.note) + '</b>' : ''}</div>
+      <div class="kv">Abonelik: <b>${Object.keys(c.subscriptions || {}).length}</b>${c.subscriptions_deleted ? ' (silindi)' : ''} · Ham numara: <b>${c.pii_purged_at ? 'silindi' : 'izleme süresince tutuluyor'}</b></div>
+      ${c.summary ? `<div class="small" style="margin-top:8px"><b>Özet:</b> ${esc(c.summary)}</div>` : ''}
+    </div>
+    <div class="card" style="margin-top:16px"><h3>Uyarılar</h3>${alerts}</div>
+    ${terminal ? '' : `<div class="card" style="margin-top:16px"><h3>Aksiyonlar</h3><div id="actMsg"></div><div class="actions">
+      <div class="card"><div class="field">Manuel serbest bırak (yalnız frozen)<input id="relReason" placeholder="Gerekçe: hasta geri arandı…"></div><button class="small" id="aRelease" style="margin-top:6px">Serbest bırak</button></div>
+      <div class="card"><div class="small">Roaming olayı gelmediyse</div><button class="small" id="aArrive" style="margin-top:6px">Varışı teyit et</button></div>
+      <div class="card"><div class="field">Yol kapanması<input id="disNote" placeholder="O-3 çevre yolu kapalı"></div>
+        <div class="toolbar" style="margin:6px 0 0"><button class="small" id="aDis">Bildir</button><button class="ghost small" id="aDisClr">Kaldır</button></div></div>
+      <div class="card"><div class="field">Sürücü değiştir<select id="drvSel">${driverOpts}</select></div><button class="small" id="aDrv" style="margin-top:6px">Ata</button></div>
+      <div class="card"><div class="field">Not<input id="noteTxt" maxlength="500"></div><button class="small" id="aNote" style="margin-top:6px">Ekle</button></div>
+      <div class="card"><div class="field">Vakayı kapat<input id="closeReason" placeholder="Gerekçe"></div><button class="small" id="aClose" style="margin-top:6px;background:var(--bad)">Kapat</button></div>
+    </div></div>`}
+    <div class="card" style="margin-top:16px"><h3>Mesajlar (hasta, sürücü, aile)</h3>${msgs}</div>
+    <div class="card" style="margin-top:16px"><h3>Audit — satıra tıkla, gerekçeyi gör</h3><div class="timeline tl" id="tl">${tl}</div><div id="explainBox"></div>
+      <a class="small" style="color:var(--accent)" href="/v1/cases/${encodeURIComponent(c.id)}/audit" target="_blank" rel="noopener">Kapanış raporu (JSON)</a></div>`;
+  document.querySelectorAll('[data-ack]').forEach(b => { b.onclick = () => act({ action: 'ack_alert', alert_id: b.dataset.ack }); });
+  document.querySelectorAll('#tl .ev').forEach(el => { el.onclick = () => {
+    const e = c.timeline[+el.dataset.i];
+    $('explainBox').innerHTML = e.explain && e.explain.length ? `<div class="small" style="margin-top:10px"><b>${esc(e.rule || e.event)}</b> · aksiyonlar: ${esc((e.actions || []).join(', ') || '—')}</div>` + renderExplain(e.explain) : '<div class="small" style="margin-top:10px">Bu adımda kural değerlendirmesi yok.</div>';
+  }; });
+  if (terminal) return;
+  $('aRelease').onclick = () => act({ action: 'manual_release', reason: $('relReason').value });
+  $('aArrive').onclick = () => act({ action: 'confirm_arrival' });
+  $('aDis').onclick = () => act({ action: 'report_disruption', note: $('disNote').value || 'yol kapanması' });
+  $('aDisClr').onclick = () => act({ action: 'clear_disruption' });
+  $('aDrv').onclick = () => act({ action: 'reassign_driver', driver_id: $('drvSel').value });
+  $('aNote').onclick = () => act({ action: 'note', text: $('noteTxt').value });
+  $('aClose').onclick = () => act({ action: 'close_case', reason: $('closeReason').value });
+}
+
+async function loadClinics() {
+  try {
+    clinics = await api('/v1/clinics');
+    $('clinicSel').innerHTML = clinics.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+    fillDrivers();
+  } catch (e) { }
+}
+function fillDrivers() {
+  const c = clinics.find(x => x.id === $('clinicSel').value) || { drivers: [] };
+  $('driverSel').innerHTML = c.drivers.map(d => `<option value="${esc(d.id)}">${esc(d.name)} · ${esc(d.plate || '')}</option>`).join('');
+}
+$('clinicSel').onchange = fillDrivers;
+
+$('caseForm').onsubmit = async ev => {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  const iso = v => new Date(v).toISOString();
+  const legs = [];
+  if (f.get('transit') && f.get('transit_eta')) legs.push({ country: +f.get('transit'), eta: iso(f.get('transit_eta')), label: 'aktarma' });
+  legs.push({ country: +f.get('dest'), eta: iso(f.get('eta')), label: 'varış' });
+  const body = { patient_name: f.get('patient_name'), patient_phone: f.get('patient_phone'), language: f.get('language'),
+    clinic_id: f.get('clinic_id'), driver_id: f.get('driver_id') || null, itinerary: { destination_country: +f.get('dest'), legs } };
+  if (f.get('family_phone')) body.family_contact = { name: f.get('family_name') || 'Aile', phone: f.get('family_phone'), language: f.get('language') };
+  if (f.get('consent')) body.consent = { method: 'clinic_form' };
+  try {
+    const c = await api('/v1/cases', body);
+    $('formMsg').className = 'okmsg';
+    $('formMsg').textContent = c.consent_link ? `Vaka açıldı (${c.id}). Rıza bağlantısı hastaya gönderildi.` : `Vaka açıldı ve izleme başladı (${c.id}).`;
+    ev.target.reset(); selectedId = c.id; await loadList();
+  } catch (e) { $('formMsg').className = 'err'; $('formMsg').textContent = e.message; }
+};
+
+$('btnRefresh').onclick = loadList;
+$('stateFilter').onchange = loadList;
+$('btnLogout').onclick = () => { setKey(''); location.reload(); };
+const typing = () => ['INPUT', 'SELECT', 'TEXTAREA'].includes((document.activeElement || {}).tagName);
+setInterval(() => { if ($('auto').checked && !document.hidden && !typing()) loadList(); }, 10000);
+loadHealth('health'); loadClinics(); loadList();
+</script>
+</body>
+</html>

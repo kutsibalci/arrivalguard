@@ -1,0 +1,21 @@
+{
+  "_doc": "Demo klinik sicili — depo boşsa açılışta yüklenir. Numaralar kurgusal (UK Ofcom 07700 900xxx kurgu aralığı).",
+  "clinics": [
+    {
+      "id": "clinic-1",
+      "name": "İstanbul Estetik Kliniği",
+      "language": "tr",
+      "meeting_point": "Uluslararası Gelişler — Kapı 3",
+      "zones": {
+        "airport": {"lat": 41.2753, "lng": 28.7519, "radius": 2000, "label": "İstanbul Havalimanı — Uluslararası Gelişler"},
+        "corridor": {"lat": 41.1620, "lng": 28.8700, "radius": 1500, "label": "Havalimanı → klinik koridoru"},
+        "clinic": {"lat": 41.0615, "lng": 28.9870, "radius": 600, "label": "Klinik"}
+      },
+      "drivers": [
+        {"id": "drv-1", "name": "Mehmet Y.", "plate": "34 ABC 123", "phone": "+447700900101", "language": "tr"},
+        {"id": "drv-2", "name": "Ayşe K.", "plate": "34 XYZ 789", "phone": "+447700900102", "language": "tr"}
+      ],
+      "coordinator": {"name": "Uluslararası Hasta Birimi"}
+    }
+  ]
+}

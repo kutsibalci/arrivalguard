@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>ArrivalGuard Sürücü</title>
+<link rel="stylesheet" href="/static/base.css">
+<style>main{max-width:560px}.card h2{margin:0 0 8px;font-size:20px}</style>
+</head>
+<body>
+<header><div><h1>ArrivalGuard — Sürücü doğrulama</h1><div class="sub">Hastayı aramadan önce cihazınızı doğrulayın</div></div></header>
+<main>
+  <div class="card" id="box"><div class="small">…</div></div>
+</main>
+<script src="/static/base.js"></script>
+<script>
+const token = location.pathname.split('/').pop();
+const box = document.getElementById('box');
+const RESULT = {
+  ok: ['okmsg', 'Doğrulandı ✓ Buluşma kodu SMS ile gönderildi. Hastayla buluşunca kodu siz söyleyin.'],
+  fail: ['err', 'Doğrulanamadı: bu telefon kayıtlı hattınız değil. Koordinatör bilgilendirildi.'],
+  network: ['err', 'Operatör hattınızı tanıyamadı. Wi-Fi'ı kapatıp mobil veriyle yeniden deneyin.'],
+  error: ['err', 'Operatör doğrulama servisine şu an ulaşılamıyor. Biraz sonra yeniden deneyin ya da koordinatörü arayın.'],
+};
+
+async function load() {
+  let info;
+  try { info = await api('/v1/driver/' + encodeURIComponent(token)); }
+  catch (e) { box.innerHTML = '<p>Bu bağlantı geçersiz ya da vaka kapanmış.</p>'; return; }
+  const sim = info.sim_device_prefix;
+  const result = RESULT[new URLSearchParams(location.search).get('nv')];
+  box.innerHTML = `<h2>${esc(info.driver_name)}</h2>
+    <div class="kv">Hasta: <b>${esc(info.patient_first_name)}</b> · ${esc(info.clinic_name)}</div>
+    <div class="kv">Buluşma: <b>${esc(info.meeting_point)}</b></div>
+    <p class="small">Doğrulama, bu sayfayı açan telefonun şebeke tarafından sizin kayıtlı hattınız olduğunu teyit eder
+      (Number Verification). <b>Wi-Fi'ı kapatıp mobil veriyle</b> açın: operatörünüzün sayfasına kısa bir yönlendirme olur ve buraya
+      geri dönersiniz. Başarılı olunca size ve hastaya aynı buluşma kodu gönderilir; hastayla buluştuğunuzda kodu siz söyleyin.</p>
+    ${info.verified && !result ? '<p class="okmsg">Cihazınız zaten doğrulandı. Kod SMS ile gönderildi.</p>' : ''}
+    ${sim ? `<label class="field" style="margin-top:10px">Simülasyon: bu cihazın hattı (NAC_MODE=${esc(info.nac_mode)}; boş → kayıtlı hat)
+      <input id="line" placeholder="+447700900101"></label>` : ''}
+    <div class="toolbar" style="margin:12px 0 0"><button id="go">Cihazımı doğrula</button></div>
+    <div id="msg"${result ? ` class="${result[0]}"` : ''}>${result ? esc(result[1]) : ''}</div>`;
+  if (result) history.replaceState(null, '', location.pathname);  // yenilemede eski sonuç tekrar görünmesin
+  document.getElementById('go').onclick = () => {
+    // Tam sayfa yönlendirme: operatör, cihazı ancak telefonun kendi mobil veri oturumundan tanıyabilir (3-legged OIDC).
+    const line = sim ? (document.getElementById('line').value || '').trim() : '';
+    document.getElementById('go').disabled = true;
+    location.href = '/v1/driver/' + encodeURIComponent(token) + '/nv/start' + (line ? '?sim_line=' + encodeURIComponent(line) : '');
+  };
+}
+load();
+</script>
+</body>
+</html>

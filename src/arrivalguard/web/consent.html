@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>ArrivalGuard Consent</title>
+<link rel="stylesheet" href="/static/base.css">
+<style>
+  main{max-width:640px}
+  .card h2{margin:0 0 8px;font-size:20px}
+  ul.mon{padding-left:20px;margin:8px 0}ul.mon li{margin:6px 0;font-size:14px}
+  .choices{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  .choices button{flex:1;min-width:160px}
+  [dir="rtl"] ul.mon{padding-left:0;padding-right:20px}
+</style>
+</head>
+<body>
+<header><div><h1>ArrivalGuard</h1><div class="sub" id="sub"></div></div></header>
+<main>
+  <div class="card" id="box"><div class="small">…</div></div>
+</main>
+<script src="/static/base.js"></script>
+<script>
+const T = {
+  en: { sub: 'Arrival protection — your decision', hello: 'Hello {name}', intro: '{clinic} would like to meet you safely from the airport to the clinic using signals your mobile operator already produces.',
+    uses: 'What is used', never: 'What is never done', neverList: ['No location history is stored (we only learn whether you entered an area).', 'No app to install, nothing to press.', 'Your phone number never appears in any report — only a masked form.'],
+    retention: 'Records are deleted {days} days after your case closes. You can withdraw at any time from this page; monitoring stops immediately.',
+    accept: 'I agree', decline: 'No, thanks', withdraw: 'Withdraw consent', done: { granted: 'Thank you — arrival protection is active.', declined: 'Understood — no monitoring. Your coordinator will contact you by phone.',
+      withdrawn: 'Consent withdrawn — monitoring stopped and subscriptions were deleted.', operator_pending: 'Thank you. Your operator also needs to confirm; the clinic will contact you.' },
+    active: 'Arrival protection is active.', inactive: 'This case is no longer active.', invalid: 'This link is invalid or has expired.' },
+  tr: { sub: 'Varış koruması — karar sizin', hello: 'Merhaba {name}', intro: '{clinic}, operatörünüzün zaten ürettiği şebeke sinyallerini kullanarak sizi havalimanından kliniğe kadar güvenle karşılamak istiyor.',
+    uses: 'Neler kullanılır', never: 'Asla yapılmayanlar', neverList: ['Konum geçmişi tutulmaz (yalnızca bir bölgeye girip girmediğiniz öğrenilir).', 'Uygulama kurmanız ya da bir şeye basmanız gerekmez.', 'Numaranız hiçbir raporda görünmez — yalnızca maskeli hali.'],
+    retention: 'Kayıtlar vaka kapandıktan {days} gün sonra silinir. İstediğiniz an bu sayfadan geri çekebilirsiniz; izleme hemen durur.',
+    accept: 'Onaylıyorum', decline: 'Hayır, teşekkürler', withdraw: 'Rızamı geri çek', done: { granted: 'Teşekkürler — varış korumanız etkin.', declined: 'Anlaşıldı — izleme yapılmayacak. Koordinatörünüz sizi telefonla arayacak.',
+      withdrawn: 'Rıza geri çekildi — izleme durdu, abonelikler silindi.', operator_pending: 'Teşekkürler. Operatörünüzün de onayı gerekiyor; klinik sizinle iletişime geçecek.' },
+    active: 'Varış korumanız etkin.', inactive: 'Bu vaka artık aktif değil.', invalid: 'Bu bağlantı geçersiz ya da süresi dolmuş.' },
+  ar: { sub: 'حماية الوصول — القرار لك', hello: 'مرحباً {name}', intro: 'ترغب {clinic} في استقبالك بأمان من المطار إلى العيادة باستخدام إشارات ينتجها مشغّل هاتفك أصلاً.',
+    uses: 'ما الذي يُستخدم', never: 'ما لا يحدث أبداً', neverList: ['لا يُحفظ سجل للمواقع (نعرف فقط إن دخلت منطقة ما).', 'لا تطبيق للتثبيت ولا شيء للضغط.', 'لا يظهر رقمك في أي تقرير — فقط بصيغة مخفية.'],
+    retention: 'تُحذف السجلات بعد {days} يوماً من إغلاق الحالة. يمكنك السحب في أي وقت من هذه الصفحة؛ تتوقف المتابعة فوراً.',
+    accept: 'أوافق', decline: 'لا، شكراً', withdraw: 'سحب الموافقة', done: { granted: 'شكراً — حماية الوصول مفعّلة.', declined: 'مفهوم — لن تتم المتابعة. سيتصل بك المنسق هاتفياً.',
+      withdrawn: 'تم سحب الموافقة — توقفت المتابعة وحُذفت الاشتراكات.', operator_pending: 'شكراً. يلزم تأكيد مشغّلك أيضاً؛ ستتواصل معك العيادة.' },
+    active: 'حماية الوصول مفعّلة.', inactive: 'هذه الحالة لم تعد نشطة.', invalid: 'هذا الرابط غير صالح أو منتهي الصلاحية.' },
+};
+const token = location.pathname.split('/').pop();
+const fmt = (s, o) => s.replace(/\{(\w+)\}/g, (_, k) => esc(o[k] ?? ''));
+const box = document.getElementById('box');
+
+function setLang(lang) {
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  document.getElementById('sub').textContent = T[lang].sub;
+}
+
+async function load() {
+  let info;
+  try { info = await api('/v1/consent/' + encodeURIComponent(token)); }
+  catch (e) { setLang('en'); box.innerHTML = `<p>${esc(T.en.invalid)}</p><p dir="rtl">${esc(T.ar.invalid)}</p><p>${esc(T.tr.invalid)}</p>`; return; }
+  const t = T[info.language] || T.en;
+  setLang(info.language);
+  const head = `<h2>${fmt(t.hello, { name: info.patient_first_name })}</h2><p>${fmt(t.intro, { clinic: info.clinic_name })}</p>`;
+  if (info.status === 'pending') {
+    box.innerHTML = head + `<h3>${esc(t.uses)}</h3><ul class="mon">${info.monitored.map(m => `<li>${esc(m)}</li>`).join('')}</ul>
+      <h3>${esc(t.never)}</h3><ul class="mon">${t.neverList.map(m => `<li>${esc(m)}</li>`).join('')}</ul>
+      <p class="small">${fmt(t.retention, { days: info.retention_days })} · v${esc(info.text_version || '')}</p>
+      <div class="choices"><button id="yes">${esc(t.accept)}</button><button id="no" class="ghost">${esc(t.decline)}</button></div><div id="msg"></div>`;
+    document.getElementById('yes').onclick = () => decide('accept', t);
+    document.getElementById('no').onclick = () => decide('decline', t);
+  } else if (info.can_withdraw) {
+    box.innerHTML = head + `<p class="okmsg">${esc(t.active)}</p><p class="small">${fmt(t.retention, { days: info.retention_days })}</p>
+      <div class="choices"><button id="wd" class="ghost">${esc(t.withdraw)}</button></div><div id="msg"></div>`;
+    document.getElementById('wd').onclick = () => decide('withdraw', t);
+  } else {
+    box.innerHTML = head + `<p>${esc(t.done[info.status] || t.inactive)}</p>`;
+  }
+}
+
+async function decide(decision, t) {
+  document.querySelectorAll('.choices button').forEach(b => b.disabled = true);
+  try {
+    const r = await api('/v1/consent/' + encodeURIComponent(token), { decision });
+    box.innerHTML = `<p class="okmsg">${esc(t.done[r.status] || t.inactive)}</p>`;
+  } catch (e) {
+    document.getElementById('msg').className = 'err'; document.getElementById('msg').textContent = e.message;
+    document.querySelectorAll('.choices button').forEach(b => b.disabled = false);
+  }
+}
+load();
+</script>
+</body>
+</html>

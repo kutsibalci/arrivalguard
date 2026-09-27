@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arrivalguard"
+version = "0.2.0"
+description = "Event-driven arrival protection for medical tourists using Nokia Network as Code (CAMARA) signals — without location history."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "ArrivalGuard contributors" }]
+keywords = ["camara", "network-as-code", "nokia", "medical-tourism", "fastapi", "open-gateway"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Framework :: FastAPI",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "httpx>=0.27",
+  "pydantic>=2.5",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+llm = ["anthropic>=0.70"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
+
+[project.urls]
+Documentation = "https://github.com/kutsibalci/arrivalguard#readme"
+
+[project.scripts]
+arrivalguard-probe = "arrivalguard.tools.live_probe:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+arrivalguard = ["web/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning:arrivalguard.*"]
+
+[tool.ruff]
+line-length = 150
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE"]
+ignore = [
+  "S101",   # testlerde assert
+  "S311",   # random yalnızca retry jitter için
+  "B008",   # FastAPI Depends() varsayılan argümanda
+  "E501",   # uzun Türkçe açıklama satırları
+  "UP017",  # kod tabanı timezone.utc kullanır
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]
+
+[tool.coverage.run]
+source = ["arrivalguard"]
+omit = ["src/arrivalguard/tools/*"]

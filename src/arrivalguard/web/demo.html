@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArrivalGuard — Medikal Turist Varış Koruması</title>
+<link rel="stylesheet" href="/static/base.css">
+<style>
+  .motto{font-size:15px;color:var(--accent);font-weight:600;text-align:right}
+  .layout{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}@media (max-width:1080px){.layout{grid-template-columns:1fr}}
+  svg.map{width:100%;height:auto;background:#0b0f18;border-radius:12px;border:1px solid var(--line)}
+  .node-lbl{fill:var(--text);font-size:12px;font-weight:600}.node-sub{fill:var(--muted);font-size:10px}
+  .zone{fill:rgba(56,189,248,.07);stroke:rgba(56,189,248,.45);stroke-dasharray:4 4}
+  .zone.hit{fill:rgba(34,197,94,.16);stroke:var(--ok);stroke-dasharray:0}
+  .zone.bad{fill:rgba(239,68,68,.16);stroke:var(--bad);stroke-dasharray:0}
+  .path{stroke:#2a3650;stroke-width:10;fill:none;stroke-linecap:round}
+  .path2{stroke:#3b4a6b;stroke-width:2;fill:none;stroke-dasharray:9 9}
+  #pax{transition:transform 1s ease-in-out}
+  .stepper{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 4px}
+  .stepper .st{flex:1;min-width:76px;text-align:center;font-size:11px;padding:6px 4px;border-radius:8px;border:1px solid var(--line);color:var(--muted)}
+  .stepper .st.on{border-color:var(--accent);color:var(--accent);background:rgba(56,189,248,.1);font-weight:700}
+  .stepper .st.done{border-color:rgba(34,197,94,.5);color:var(--ok)}
+  .stepper .st.frozen{border-color:var(--bad);color:var(--bad);background:rgba(239,68,68,.1)}
+  .phone-app{border-radius:24px;border:6px solid #202a40;padding:12px;background:#0b0f18;min-height:220px}
+  .phone-app .bar{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-bottom:8px}
+  .bubble{background:#16203a;border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13px;animation:fadein .45s}
+  .bubble .t{color:var(--muted);font-size:10px;font-family:ui-monospace,Consolas,monospace}
+  .bubble.ok{border-color:rgba(34,197,94,.55);background:rgba(34,197,94,.08)}
+  .bubble.bad{border-color:rgba(239,68,68,.6);background:rgba(239,68,68,.1)}
+  .bubble.warn{border-color:rgba(245,158,11,.55);background:rgba(245,158,11,.08)}
+  .bubble[dir="rtl"]{text-align:right}
+  @keyframes fadein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .alert{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0;font-size:13px;background:#121a29}
+  .alert.alarm{border-color:rgba(239,68,68,.65);background:rgba(239,68,68,.08)}
+  .alert.warn{border-color:rgba(245,158,11,.55)}.alert.info{border-color:rgba(56,189,248,.45)}
+  .alert .hd{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .tl{max-height:360px;overflow:auto}
+  .tl .ev{cursor:pointer}
+  .tl .ev.sel{background:rgba(56,189,248,.08);border-radius:8px;padding:4px 6px;margin-left:-6px}
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:760px){.compare{grid-template-columns:1fr}}
+  .compare .card{margin:0}
+  .sig{font-family:ui-monospace,Consolas,monospace;color:var(--warn);font-size:13px;text-align:center;margin:6px 0 10px}
+  .headline{font-size:14px;color:var(--accent);margin-top:6px}
+  details summary{cursor:pointer;color:var(--muted);font-size:13px}
+  .clock{font-family:ui-monospace,Consolas,monospace;font-size:18px;color:var(--accent)}
+  .chips span{display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font-size:11px;color:var(--muted)}
+  .chips span.done{border-color:var(--ok);color:var(--ok)}
+  .chips span.bad{border-color:var(--bad);color:var(--bad)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>ArrivalGuard — Medikal Turist Varış Koruması</h1>
+    <div class="sub">Nokia Network as Code · Roaming + Reachability + Geofencing (webhook) · SIM Swap · Number Verification (sürücü cihazı) · Location Verification · Consent Info · <span id="health"></span> · <a href="/console" style="color:var(--accent)">Koordinatör konsolu →</a></div>
+  </div>
+  <div class="motto">“Aynı sinyal, zıt anlam.”</div>
+</header>
+<main>
+  <div class="card">
+    <div class="toolbar" style="margin:0">
+      <button id="btnHappy">Tam zincir (varış → klinik)</button>
+      <button id="btnLocal" style="background:var(--warn)">Aynı sinyal, zıt anlam</button>
+      <button id="btnSim" class="ghost">Varışta SIM değişmiş</button>
+      <button id="btnTrouble" class="ghost">Trafik mi, sorun mu?</button>
+      <button id="btnDown" class="ghost">Nokia API çöktü</button>
+      <button id="btnNoSignal" class="ghost">Varış sinyali gelmedi</button>
+      <button id="btnConsent" class="ghost">Rıza akışı</button>
+      <button id="btnReset" class="ghost">Sıfırla</button>
+      <span class="clock" id="clock">--:--</span>
+    </div>
+    <div class="small" style="margin-top:8px">Tek tuş: vaka açılır, rıza sonrası 7 Nokia aboneliği (her olay tipi ayrı) <b>gerçek CAMARA gövdesiyle</b> kurulur, olaylar durum makinesine akar, kararlar <code>explain[]</code> ile gösterilir. Vaka kapanınca abonelikler silinir, ham numara silinir.</div>
+    <div class="headline" id="headline"></div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div id="comparePanel" style="display:none;margin-top:16px">
+    <div class="card">
+      <h3>Aynı ham sinyal — zıt karar</h3>
+      <div class="sig" id="compareSig"></div>
+      <div class="compare" id="compareCards"></div>
+    </div>
+  </div>
+
+  <div class="layout" style="margin-top:16px">
+    <div>
+      <div class="card">
+        <h3>Varış zinciri</h3>
+        <svg class="map" viewBox="0 0 660 280" id="map" aria-label="kalkış, aktarma, havalimanı, koridor, klinik">
+          <path class="path" d="M60 230 C 130 230, 150 150, 210 150 S 300 90, 370 90 S 470 140, 510 155 S 570 215, 610 230"/>
+          <path class="path2" d="M60 230 C 130 230, 150 150, 210 150 S 300 90, 370 90 S 470 140, 510 155 S 570 215, 610 230"/>
+          <g id="z-origin"><circle cx="60" cy="230" r="11" fill="#1f2a44" stroke="#38bdf8"/><text class="node-lbl" x="60" y="258" text-anchor="middle">Kalkış</text></g>
+          <g id="z-transit"><circle class="zone" cx="210" cy="150" r="34"/><circle cx="210" cy="150" r="11" fill="#1f2a44" stroke="#38bdf8"/><text class="node-lbl" x="210" y="200" text-anchor="middle">Aktarma (Doha)</text><text class="node-sub" x="210" y="213" text-anchor="middle">974 · sürücü gönderilmez</text></g>
+          <g id="z-airport"><circle class="zone" cx="370" cy="90" r="40"/><rect x="357" y="77" width="26" height="26" rx="4" fill="#1f2a44" stroke="#38bdf8"/><text class="node-lbl" x="370" y="145" text-anchor="middle">İstanbul Havalimanı</text><text class="node-sub" x="370" y="158" text-anchor="middle">bütünlük kapısı · ilk temas</text></g>
+          <g id="z-corridor"><circle class="zone" cx="510" cy="155" r="38"/><circle cx="510" cy="155" r="10" fill="#1f2a44" stroke="#38bdf8"/><text class="node-lbl" x="510" y="208" text-anchor="middle">Koridor</text><text class="node-sub" x="510" y="221" text-anchor="middle">1500 m geofence</text></g>
+          <g id="z-clinic"><circle class="zone" cx="610" cy="230" r="30"/><rect x="598" y="219" width="24" height="22" rx="3" fill="#1f2a44" stroke="#38bdf8"/><text class="node-lbl" x="610" y="272" text-anchor="middle">Klinik</text></g>
+          <g id="pax" transform="translate(60,230)">
+            <circle r="13" fill="#f59e0b"/><circle cy="-3" r="4" fill="#0b0f18"/><path d="M-6 6 a6 6 0 0 1 12 0" fill="#0b0f18"/>
+          </g>
+          <g id="pax2" transform="translate(60,230)" style="display:none">
+            <circle r="13" fill="#a78bfa"/><circle cy="-3" r="4" fill="#0b0f18"/><path d="M-6 6 a6 6 0 0 1 12 0" fill="#0b0f18"/>
+          </g>
+          <text x="12" y="20" class="node-sub">Kesikli daire = dinlenen geofence aboneliği · Yeşil = olay geldi · Kırmızı = karar kilitledi</text>
+          <text x="12" y="34" class="node-sub" id="mapNote"></text>
+        </svg>
+        <div class="stepper" id="stepper"></div>
+        <div class="small" id="stateLine">—</div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3>Karar günlüğü (audit) — satıra tıkla, gerekçeyi gör</h3>
+        <div class="small">Her geçiş kliniğin hizmet kanıtı: olay, durum geçişi, kural, <code>explain[]</code>.</div>
+        <div class="timeline tl" id="timeline"><div class="small" style="margin-top:8px">Bir senaryo başlatın.</div></div>
+        <div id="explainBox"></div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <details><summary>Debug — Nokia çağrıları, abonelikler, bozulmuş sinyaller, ham yanıt</summary>
+          <h4 class="small">Bozulmuş sinyaller (hata döndüren API'ler)</h4><pre id="degradedPre">[]</pre>
+          <h4 class="small">Abonelikler (/v1/state)</h4><pre id="subsPre">[]</pre>
+          <h4 class="small">Son NaC çağrıları (/v1/_debug/calls) — telefon maskeli</h4><pre id="callsPre">[]</pre>
+          <h4 class="small">Son yanıt</h4><pre id="rawPre">{}</pre>
+        </details>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h3>Hastanın telefonu</h3>
+        <div class="phone-app">
+          <div class="bar"><span id="paxName">—</span><span id="paxPhone"></span></div>
+          <div id="feed"><div class="small">Mesaj yok.</div></div>
+        </div>
+      </div>
+      <div class="card" id="feed2Card" style="margin-top:16px;display:none">
+        <h3>İkinci hasta (karşılaştırma)</h3>
+        <div class="phone-app">
+          <div class="bar"><span id="paxName2">—</span><span id="paxPhone2"></span></div>
+          <div id="feed2"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>Koordinatör konsolu</h3>
+        <div class="small">Eskalasyon bütçesi: vaka başına <b id="budgetCfg">3</b> uyandırma. Bütçe dolunca yeni bildirim yerine açık uyarıya kanıt eklenir.</div>
+        <div id="alerts"><div class="small" style="margin-top:8px">Uyarı yok.</div></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>Gizlilik mimarisi</h3>
+        <ul class="small" style="padding-left:18px;margin:6px 0">
+          <li>Konum <b>geçmişi tutulmaz</b>: sürekli takip yerine geofence sınır olayları dinlenir.</li>
+          <li>Location Verification yalnızca varışta bir kez, <b>koordinat değil hüküm</b> (TRUE/FALSE) döner.</li>
+          <li>Telefon numarası yanıtlarda maskeli (<code>+44770***0001</code>), saklanan alan hash.</li>
+          <li>Sürücü/aile numaraları da maskeli + hash; vaka kapanınca ham numaralar silinir.</li>
+          <li>Rıza yoksa izleme yok; hasta rızasını geri çekince abonelikler anında silinir.</li>
+          <li>Buluşma kodu ve bağlantı token'ları koordinatör ekranında da maskelidir.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="/static/base.js"></script>
+<script>
+const NODE = { origin: [60, 230], transit: [210, 150], airport: [370, 90], corridor: [510, 155], clinic: [610, 230] };
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const RTL = l => (l || '').toLowerCase().startsWith('ar');
+let last = null, selected = null;
+
+function setPax(el, node) { const p = NODE[node] || NODE.origin; $(el).setAttribute('transform', `translate(${p[0]},${p[1]})`); }
+function setZone(z, cls) { const c = document.querySelector(`#z-${z} .zone`); if (c) c.setAttribute('class', 'zone ' + (cls || '')); }
+function resetMap() { ['transit', 'airport', 'corridor', 'clinic'].forEach(z => setZone(z, '')); setPax('pax', 'origin'); setPax('pax2', 'origin'); $('mapNote').textContent = ''; }
+
+function renderStepper(stepStates) {
+  $('stepper').innerHTML = (last && last.stepLabels || []).map((s, i) => {
+    let cls = 'st';
+    if (i < stepStates.idx) cls += ' done';
+    if (i === stepStates.idx) cls += stepStates.frozen && i === 3 ? ' frozen' : ' on';
+    return `<div class="${cls}">${esc(s.label)}</div>`;
+  }).join('');
+}
+
+function bubble(target, m) {
+  const kind = m.kind || '';
+  const lvl = /rejected|frozen|withdrawn|declined/.test(kind) ? 'bad' : /verified|closed|pickup|granted/.test(kind) && !/unverified/.test(kind) ? 'ok' : /local_sim|transit|unverified|consent_request/.test(kind) ? 'warn' : '';
+  const el = document.createElement('div');
+  el.className = 'bubble ' + lvl;
+  if (RTL(m.lang)) el.setAttribute('dir', 'rtl');
+  el.innerHTML = `<div class="t">${esc(hm(m.t))} · ${esc(m.channel)} · ${esc(m.lang)}</div>${esc(m.text)}`;
+  $(target).appendChild(el);
+  $(target).scrollTop = 1e6;
+}
+
+function renderAlerts(cases) {
+  const items = [];
+  cases.forEach(c => (c.alerts || []).forEach(a => items.push({ ...a, case_id: c.id, who: c.patient.name })));
+  items.sort((a, b) => a.t.localeCompare(b.t));
+  if (!items.length) { $('alerts').innerHTML = '<div class="small" style="margin-top:8px">Uyarı yok.</div>'; return; }
+  $('alerts').innerHTML = items.map(a => `<div class="alert ${esc(a.level)}">
+      <div class="hd"><b>${esc(a.title)}</b><span class="small">${esc(hm(a.t))} · ${esc(a.who)}${a.budget ? ' · bütçe ' + esc(a.budget) : ''}</span></div>
+      <div class="small" style="margin-top:4px">${esc(a.note || '')}${a.confidence != null ? ' · güven ' + Math.round(a.confidence * 100) + '%' : ''}</div>
+    </div>`).join('');
+}
+
+function renderTimeline(cases) {
+  const rows = [];
+  cases.forEach((c, ci) => (c.timeline || []).forEach(e => rows.push({ ...e, ci, who: c.patient.name })));
+  rows.sort((a, b) => a.t.localeCompare(b.t) || a.seq - b.seq);
+  $('timeline').innerHTML = rows.map((e, i) => {
+    const lvl = decisionLevel(e.decision);
+    return `<div class="ev ${lvl}" data-i="${i}">
+      <b>${esc(hm(e.t))}</b> ${esc(e.event)} <span class="small">${esc(e.from)} → ${esc(e.to)}</span>
+      ${e.decision ? badge(lvl || 'info', e.decision) : ''}${e.confidence != null ? ' <span class="small">güven ' + Math.round(e.confidence * 100) + '%</span>' : ''}
+      <div class="small">${esc(e.note || '')}${cases.length > 1 ? ' — <i>' + esc(e.who) + '</i>' : ''}</div></div>`;
+  }).join('') || '<div class="small">—</div>';
+  window._rows = rows;
+  document.querySelectorAll('#timeline .ev').forEach(el => { el.onclick = () => pick(+el.dataset.i); });
+}
+function pick(i) {
+  selected = i;
+  document.querySelectorAll('#timeline .ev').forEach(el => el.classList.toggle('sel', +el.dataset.i === i));
+  const e = (window._rows || [])[i];
+  $('explainBox').innerHTML = e && e.explain && e.explain.length
+    ? `<div class="small" style="margin-top:10px"><b>${esc(e.rule || e.event)}</b> · aksiyonlar: ${esc((e.actions || []).join(', ') || '—')}</div>` + renderExplain(e.explain)
+    : '<div class="small" style="margin-top:10px">Bu adımda kural değerlendirmesi yok.</div>';
+}
+
+function renderCompare(cmp, cases) {
+  if (!cmp) { $('comparePanel').style.display = 'none'; return; }
+  $('comparePanel').style.display = '';
+  $('compareSig').textContent = cmp.signal;
+  const byId = Object.fromEntries(cases.map(c => [c.id, c]));
+  $('compareCards').innerHTML = ['a', 'b'].map(k => {
+    const s = cmp[k], c = byId[s.case_id] || {};
+    const bad = s.level === 'alarm';
+    return `<div class="card ${bad ? 'bad' : 'ok'}">
+      <h3>${esc((c.patient || {}).name || '')} ${badge(bad ? 'bad' : 'ok', bad ? 'ALARM YÜKSELİR' : 'ALARM DÜŞER')}</h3>
+      <div class="kv">İlk temas: <b>${s.first_contact ? 'kuruldu' : 'YOK'}</b></div>
+      <div class="kv">Vaka durumu: <b>${esc(c.state || '')}</b></div>
+      <div class="small" style="margin-top:6px">${esc(s.why)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function refreshSide() {
+  try { $('callsPre').textContent = JSON.stringify(await api('/v1/_debug/calls?limit=8'), null, 1); } catch (e) { }
+  try {
+    const st = await api('/v1/state');
+    $('subsPre').textContent = JSON.stringify(st.subscriptions, null, 1);
+    $('degradedPre').textContent = JSON.stringify(st.degraded, null, 1);
+    $('budgetCfg').textContent = st.config.escalation_budget_per_case;
+    last = last || {}; last.stepLabels = st.steps;
+  } catch (e) { }
+}
+
+async function play(d) {
+  last = d; last.stepLabels = last.stepLabels || (await api('/v1/state')).steps;
+  resetMap(); $('feed').innerHTML = ''; $('feed2').innerHTML = ''; $('explainBox').innerHTML = '';
+  $('headline').textContent = d.headline || '';
+  $('rawPre').textContent = JSON.stringify(d, null, 1);
+  const two = d.cases.length > 1;
+  $('feed2Card').style.display = two ? '' : 'none';
+  $('pax2').style.display = two ? '' : 'none';
+  $('paxName').textContent = d.cases[0].patient.name; $('paxPhone').textContent = d.cases[0].patient.phone_masked;
+  if (two) { $('paxName2').textContent = d.cases[1].patient.name; $('paxPhone2').textContent = d.cases[1].patient.phone_masked; }
+  renderCompare(d.compare, d.cases);
+  $('chips').innerHTML = '';
+
+  // adımları zaman sırasına göre birleştir (iki vaka varsa iç içe oynar)
+  const all = [];
+  d.steps.forEach((arr, ci) => arr.forEach(s => all.push({ ...s, ci })));
+  all.sort((a, b) => a.minute - b.minute || a.ci - b.ci);
+  const shownMsgs = [0, 0];
+  for (const s of all) {
+    $('clock').textContent = hm(s.t);
+    setPax(s.ci ? 'pax2' : 'pax', s.node);
+    const bad = BAD_DECISIONS.includes(s.decision);
+    if (NODE[s.node] && s.node !== 'origin') setZone(s.node, bad ? 'bad' : 'hit');
+    $('mapNote').textContent = s.title;
+    const chip = document.createElement('span');
+    chip.textContent = `${hm(s.t)} ${s.title}`;
+    chip.className = bad ? 'bad' : 'done';
+    $('chips').appendChild(chip);
+    // bu ana kadarki mesajları baloncuk olarak akıt
+    const c = d.cases[s.ci], target = s.ci ? 'feed2' : 'feed';
+    const msgs = (c.messages || []).filter(m => m.to === 'patient');
+    while (shownMsgs[s.ci] < msgs.length && msgs[shownMsgs[s.ci]].t <= s.t) { bubble(target, msgs[shownMsgs[s.ci]]); shownMsgs[s.ci]++; }
+    renderStepper({ idx: s.step_index, frozen: c.integrity === 'frozen' });
+    $('stateLine').textContent = `Vaka ${c.id} · durum: ${s.state} · kural: ${s.rule || '—'} · uyarı: ${s.alerts}`;
+    renderAlerts(d.cases.map(x => ({ ...x, alerts: (x.alerts || []).filter(a => a.t <= s.t) })));
+    await sleep(950);
+  }
+  d.cases.forEach((c, ci) => {
+    const target = ci ? 'feed2' : 'feed';
+    (c.messages || []).filter(m => m.to === 'patient').slice(shownMsgs[ci]).forEach(m => bubble(target, m));
+  });
+  renderAlerts(d.cases);
+  renderTimeline(d.cases);
+  pick((window._rows || []).length - 1);
+  await refreshSide();
+}
+
+async function run(name) {
+  document.querySelectorAll('button').forEach(b => b.disabled = true);
+  try { await play(await api('/v1/demo/' + name, {})); }
+  catch (e) { $('headline').textContent = 'Hata: ' + e.message; }
+  finally { document.querySelectorAll('button').forEach(b => b.disabled = false); }
+}
+$('btnHappy').onclick = () => run('happy-path');
+$('btnLocal').onclick = () => run('local-sim');
+$('btnSim').onclick = () => run('sim-swap');
+$('btnTrouble').onclick = () => run('trouble');
+$('btnDown').onclick = () => run('api-down');
+$('btnNoSignal').onclick = () => run('no-signal');
+$('btnConsent').onclick = () => run('consent');
+$('btnReset').onclick = async () => {
+  try { await api('/v1/reset', {}); } catch (e) { $('headline').textContent = 'Hata: ' + e.message; return; } resetMap();
+  $('feed').innerHTML = '<div class="small">Mesaj yok.</div>'; $('feed2').innerHTML = ''; $('feed2Card').style.display = 'none';
+  $('chips').innerHTML = ''; $('timeline').innerHTML = '<div class="small">Bir senaryo başlatın.</div>'; $('explainBox').innerHTML = '';
+  $('comparePanel').style.display = 'none'; $('headline').textContent = ''; $('clock').textContent = '--:--';
+  $('stepper').innerHTML = ''; $('stateLine').textContent = '—'; renderAlerts([]); await refreshSide();
+};
+loadHealth('health'); refreshSide();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# Yerel demo: API + Nokia simülatörü. `docker compose up --build` → http://127.0.0.1:8000/demo
+services:
+  simulator:
+    build: .
+    command: ["uvicorn", "arrivalguard.simulator.app:app", "--host", "0.0.0.0", "--port", "8081"]
+    ports: ["127.0.0.1:8081:8081"]           # sürücü sayfası OIDC yönlendirmesi tarayıcıdan simülatöre gider
+    environment:
+      NAC_FIXTURE_PATH: /app/fixtures/profiles.json
+      SIM_PUBLIC_URL: http://127.0.0.1:8081
+  api:
+    build: .
+    depends_on: [simulator]
+    ports: ["127.0.0.1:8000:8000"]
+    environment:
+      NAC_MODE: simulator
+      NAC_BASE_URL: http://simulator:8081
+      PUBLIC_BASE_URL: http://api:8000   # simülatör webhook'ları bu adrese teslim eder
+      NAC_NV_REDIRECT_URI: http://127.0.0.1:8000/driver/nv/callback   # tarayıcının döneceği adres
+      STORE_BACKEND: sqlite
+    volumes: ["ag-data:/data"]
+volumes:
+  ag-data:

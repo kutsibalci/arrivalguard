@@ -1,0 +1,52 @@
+{
+  "_doc": "ArrivalGuard demo/test profilleri. Şema: packages/nac_client/fixtures.py docstring. Tüm numaralar kurgusal (UK Ofcom 07700 900xxx aralığı); hastalar roaming'de, sürücüler klinik sicilinde.",
+  "profiles": {
+    "+447700900001": {
+      "_role": "hasta — İstanbul'a varmış (roaming, Türkiye 90), SIM temiz, ulaşılabilir",
+      "roaming": true, "country_code": 90, "country_name": ["Turkey"],
+      "reachable": true, "connectivity": ["DATA", "SMS"],
+      "sim_swap_at": "2026-05-02T10:00:00Z",
+      "location": {"lat": 41.2753, "lng": 28.7519, "radius": 800}
+    },
+    "+447700900002": {
+      "_role": "hasta — Doha aktarma hali (roaming, Katar 974)",
+      "roaming": true, "country_code": 974, "country_name": ["Qatar"],
+      "reachable": true, "location": {"lat": 25.2609, "lng": 51.6138, "radius": 800}
+    },
+    "+447700900003": {
+      "_role": "hasta — varışta SIM 3 saat önce değişmiş (demo saati 2026-08-16T02:55Z → 23:55Z)",
+      "roaming": true, "country_code": 90, "country_name": ["Turkey"],
+      "reachable": true, "sim_swap_at": "2026-08-15T23:55:00Z",
+      "location": {"lat": 41.2753, "lng": 28.7519, "radius": 800}
+    },
+    "+447700900004": {
+      "_role": "hasta — ulaşılamıyor (yerel SIM aldı / kapalı)",
+      "roaming": true, "country_code": 90, "country_name": ["Turkey"],
+      "reachable": false, "connectivity": [], "location": null
+    },
+    "+447700900005": {
+      "_role": "hasta — yavaş API (latency 900 ms)",
+      "roaming": true, "country_code": 90, "reachable": true, "latency_ms": 900
+    },
+    "+447700900006": {
+      "_role": "hasta — API 500 döner (circuit breaker + fixture-fallback demo)",
+      "roaming": true, "country_code": 90, "reachable": true, "fail": 500
+    },
+    "+447700900101": {
+      "_role": "gerçek sürücü — Number Verification true (cihaz numarası aynı)",
+      "number_verified": true, "device_phone_number": "+447700900101", "roaming": false, "country_code": 90
+    },
+    "+447700900109": {
+      "_role": "sahte sürücü — kayıtlı sürücü numarasını iddia ediyor ama cihaz farklı hat → verified false",
+      "number_verified": false, "device_phone_number": "+447700900100", "roaming": false, "country_code": 90
+    },
+    "+447700900102": {
+      "_role": "ikinci klinik sürücüsü (yedek)",
+      "number_verified": true, "device_phone_number": "+447700900102"
+    },
+    "+447700900099": {
+      "_role": "aile iletişim numarası (sadece mesaj alır)",
+      "roaming": false, "country_code": 44, "country_name": ["United Kingdom"]
+    }
+  }
+}
