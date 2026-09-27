@@ -9,6 +9,16 @@
 > A patient who goes silent **before** meeting their driver is an alarm. The same silence **after** first contact
 > is almost always a local SIM card. ArrivalGuard is an event-driven case agent that knows the difference.
 
+## Status at a glance
+
+| | |
+|---|---|
+| ✅ **Built** | Full case agent, API, coordinator console, consent page (TR/EN/AR), driver verification page, local Nokia simulator, Docker, CI. 149 tests, 90% coverage |
+| ✅ **Verified on the live Nokia API** (27.09.2026) | Network queries, consent check, subscriptions, and **real event delivery**: Nokia sent roaming and reachability events to ArrivalGuard, and the case agent acted on them |
+| ⏸ **Where we stopped** | Two checks need more than Nokia's free *Simulator* plan offers: **geofencing events** (simulated devices never move) and **driver verification on a real phone** (needs a real SIM on a supported operator network) |
+
+Details: [Project status](#project-status).
+
 ---
 
 ## The problem
@@ -30,7 +40,7 @@ events instead of tracking position:
 | Consent | Consent Info + patient's explicit opt-in | No consent → no monitoring, no subscriptions |
 | Landing | Device Roaming Status subscription (`roaming-on`) | Compared with the itinerary: **arrival or layover?** No driver details on a layover |
 | Integrity gate | SIM Swap (24 h window) | Line changed hands recently → **pickup details withheld**, coordinator alerted |
-| Driver | Number Verification on the **driver's own device** | Verified device → one-time **meeting code** to patient and driver |
+| Driver | Number Verification on the **driver's own device** (3-legged OIDC) | Verified device → one-time **meeting code** to patient and driver |
 | First call | Registry + fresh driver attestation | Unregistered caller → "do not answer"; driver's number without attestation → spoofing warning |
 | Silence | Device Reachability subscription | **Before** first contact → alarm. **After** → de-escalate (local SIM) |
 | Journey | Geofencing (corridor) + scheduler | Off-corridor + stationary + unreachable → confidence-scored escalation, with a budget |
@@ -43,13 +53,13 @@ Deciding when to stay quiet is the hard part. Every decision is a pure function 
 
 ```bash
 pip install -e ".[dev]"
-pytest                                   # 134 tests
-./run.sh simulator                       # Windows: .\run.ps1 -Mode simulator
+pytest                                   # 149 tests
+./run.sh simulator                       # Windows: $env:PYTHON="py"; .\run.ps1 -Mode simulator
 ```
 
 | URL | What |
 |---|---|
-| http://127.0.0.1:8000/demo | One-click jury demo (7 scenarios) |
+| http://127.0.0.1:8000/demo | One-click demo (7 scenarios) |
 | http://127.0.0.1:8000/console | Coordinator console: cases, alerts, actions, new case form |
 | http://127.0.0.1:8000/docs | OpenAPI |
 
@@ -74,12 +84,14 @@ Script for presenting: [docs/demo-script.md](docs/demo-script.md).
 
 ```
 src/arrivalguard/
-  nac_client/   single gateway to Nokia NaC: auth, timeout, retry, circuit breaker, masking; fixture | simulator | live
+  nac_client/   single gateway to Nokia NaC: auth, timeout, retry, circuit breaker, masking,
+                Number Verification OIDC flow; fixture | simulator | live
   rules/        pure decision functions → Decision(explain[]); all thresholds in config (AG_* env)
   agent/        deterministic case state machine, TR/EN/AR message templates, optional LLM summary
   api/          FastAPI app: cases, webhooks, consent & driver links, coordinator actions, scheduler,
                 notifications (log | signed webhook | Twilio), storage (memory | SQLite), API-key tenancy
-  simulator/    local Nokia mock with the real paths and CloudEvents delivery
+  simulator/    local Nokia mock with the real paths, OIDC endpoints and CloudEvents delivery
+  tools/        arrivalguard-probe: tests every Nokia API we use and writes a masked report
   web/          demo, coordinator console, consent page, driver page (vanilla HTML/JS, no CDN)
 ```
 
@@ -99,17 +111,58 @@ Details: [docs/architecture.md](docs/architecture.md).
 
 See [docs/privacy.md](docs/privacy.md).
 
-## Status and known limits
+## Project status
 
-This is a working prototype that passes its own tests. It is not a certified production system. Main gaps:
-- **Driver OIDC flow (live):** the driver page runs Number Verification's 3-legged OIDC flow (operator redirect →
-  code → device token). It is tested against the simulator and a mocked Nokia, but not yet on a real phone on mobile data.
-- **Live event delivery:** verified on 27.09.2026. Nokia accepted all 7 single-type subscriptions, delivered roaming
-  and reachability CloudEvents through a public HTTPS tunnel with the sink Bearer token, and the case agent processed them.
-  Geofencing events are still unverified because Nokia's simulated devices do not move.
-- **Single process:** one scheduler per deployment. SQLite suits a single node, not horizontal scaling.
+### How we got here
 
-Full list: [CHANGELOG.md](CHANGELOG.md) and [docs/api-availability.md](docs/api-availability.md).
+1. **August 2026 — hackathon idea and prototype.** Built for MENA Ignite Hackathon 2026 (GSMA × Nokia). A working
+   prototype with 59 tests, running against fixtures.
+2. **25.09.2026 — rebuilt as a maintainable project (v0.2.0).** Package layout, consent flow, coordinator console,
+   persistence, scheduler, notification channels, per-clinic API keys, production config guard, CI and Docker.
+   Driver verification was redesigned around what Number Verification can actually prove.
+3. **27.09.2026 — driver OIDC flow and live verification.** The driver page now gets its device token through
+   Number Verification's 3-legged OIDC flow. Then everything that the free plan allows was tested against the live Nokia API.
+
+### Verified on the live Nokia API
+
+Nokia Network as Code, free *Simulator* plan, simulated device `+99999991000`. Reports: [`docs/live-probe/`](docs/live-probe/).
+
+| Capability | Result |
+|---|---|
+| Roaming status, reachability status (instant queries) | ✅ 200 |
+| SIM Swap check and date | ✅ 200 |
+| Location Verification (meeting point verdict) | ✅ 200 |
+| Consent Info (operator-side consent check) | ✅ 200 |
+| Number Verification OIDC discovery (the driver page's redirect to the operator) | ✅ 200 |
+| All 7 subscriptions a case opens (2 roaming, 2 reachability, 3 geofence) | ✅ ACTIVE |
+| **Event delivery:** Nokia → public HTTPS tunnel → `/webhooks/*` with the sink Bearer token → case agent | ✅ roaming and reachability events delivered and processed |
+| Cleanup: every subscription deleted when the case ends | ✅ no leftovers |
+
+Live testing found three bugs that the simulator could not have shown. All three are fixed, and the simulator now enforces the same rules:
+
+- Device-status subscriptions accept exactly **one event type** each (422).
+- Consent Info needs a W3C DPV `purpose` and the `requestCaptureUrl` field (422).
+- The webhook credential needs an **expiry** (`accessTokenExpiresUtc`); without it Nokia rejected every subscription (422).
+
+### Where we stopped, and why
+
+The code for both remaining checks is written and tested locally. What is missing is access that the free plan does not give.
+
+| Not yet verified | Why we stopped | What would unblock it |
+|---|---|---|
+| **Geofencing events** (airport, corridor, clinic) | Subscriptions are accepted live, but Nokia's simulated devices sit at a fixed point in Budapest, so an "entered/left area" event never happens. Nokia's own integration tests skip these cases for the same reason. | A device that actually moves: a real SIM on a network Nokia supports, or simulator support for movement |
+| **Driver verification on a real phone** | Number Verification recognises the line through the phone's own mobile-data session. The free plan covers only simulated numbers, so the full redirect → code → token → verify chain cannot run on a real handset. The server side (OIDC discovery) already works live. | A real SIM on a supported operator network, beyond the free plan |
+
+### What it would take to go to production
+
+This is a working, tested prototype, not a certified medical or safety system. Before real patients:
+
+- Operator access beyond the free plan (see above) and a registered OIDC redirect URI.
+- A real notification provider (`NOTIFY_CHANNEL=webhook` or `twilio`); the default only logs messages.
+- A legal review of the consent text and data processing (KVKK / GDPR).
+- A single-node deployment behind TLS with rate limiting. The scheduler is single-process and SQLite suits one node.
+
+Full history: [CHANGELOG.md](CHANGELOG.md) · API-by-API results: [docs/api-availability.md](docs/api-availability.md).
 
 ## Documentation
 
