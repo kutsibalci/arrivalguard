@@ -190,6 +190,8 @@ def device_swap_date(request: Request, body: dict = Body(...)):
 @app.post(f"{PT}/consent-info/consent-info/v0.1/retrieve")
 def consent(request: Request, body: dict = Body(...)):
     _require_bearer(request)
+    if not isinstance(body.get("requestCaptureUrl"), bool):  # Nokia'da zorunlu (canlı 422, 27.09.2026)
+        raise HTTPException(422, {"code": "INVALID_ARGUMENT", "message": "requestCaptureUrl (bool) gerekli"})
     return fx.consent(_phone(body), body.get("scopes") or [], body.get("purpose", ""))
 
 

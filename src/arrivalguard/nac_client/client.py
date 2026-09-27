@@ -252,10 +252,12 @@ class NacClient:
         p = normalize_phone(phone)
         return self._call("device-swap", "POST", P["device_swap_date"], json={"phoneNumber": p}, phone=p, fixture_fn=lambda: self.fx.device_swap_date(p))
 
-    def consent(self, phone: str, scopes: list[str], purpose: str = "dpv:ServiceProvision") -> NacResult:
-        """Consent Info. `purpose` bir W3C DPV terimi olmalı (`^dpv:[a-zA-Z0-9]+$`; canlı 422, 09.09.2026)."""
+    def consent(self, phone: str, scopes: list[str], purpose: str = "dpv:ServiceProvision", request_capture_url: bool = False) -> NacResult:
+        """Consent Info. `purpose` bir W3C DPV terimi olmalı (`^dpv:[a-zA-Z0-9]+$`; canlı 422, 09.09.2026).
+        `requestCaptureUrl` zorunlu (canlı 422, 27.09.2026); ArrivalGuard rızayı kendi sayfasında aldığı için varsayılan false."""
         p = normalize_phone(phone)
-        return self._call("consent-info", "POST", P["consent"], json={"phoneNumber": p, "scopes": scopes, "purpose": purpose}, phone=p,
+        body = {"phoneNumber": p, "scopes": scopes, "purpose": purpose, "requestCaptureUrl": request_capture_url}
+        return self._call("consent-info", "POST", P["consent"], json=body, phone=p,
                           fixture_fn=lambda: self.fx.consent(p, scopes, purpose))
 
     # ---------------------------------------------------------------- cihaz / konum

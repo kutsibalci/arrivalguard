@@ -160,6 +160,16 @@ def test_consent_purpose_is_dpv_term(client):
     assert r.request["purpose"] == "dpv:ServiceProvision" and r.data["statusInfo"][0]["statusValidForProcessing"] is True
 
 
+def test_consent_sends_required_request_capture_url_and_simulator_enforces_it():
+    """Nokia Consent Info `requestCaptureUrl` alanını zorunlu tutuyor (canlı 422, 27.09.2026)."""
+    c, sim = _sim_client()
+    r = c.consent("+447700900201", ["sim-swap"])
+    assert r.request["requestCaptureUrl"] is False and "statusInfo" in r.data
+    raw = TestClient(sim.app).post("/passthrough/camara/v1/consent-info/consent-info/v0.1/retrieve",
+                                   json={"phoneNumber": "+447700900201", "scopes": ["sim-swap"], "purpose": "dpv:ServiceProvision"})
+    assert raw.status_code == 422
+
+
 def test_breaker_half_open_allows_single_trial():
     b = CircuitBreaker(failure_threshold=1, cooldown_s=0)
     b.failure("api")

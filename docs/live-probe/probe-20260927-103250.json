@@ -1,0 +1,112 @@
+{
+ "mode": "live",
+ "base_url": "https://network-as-code.p-eu.rapidapi.com",
+ "phone": "+99999***1000",
+ "results": [
+  {
+   "key": "roaming",
+   "label": "Device Roaming Status (anlık)",
+   "role": "webhook yedeği + roaming-on ülke tamamlama",
+   "ok": true,
+   "status": "200",
+   "latency_ms": 1278,
+   "fields": [
+    "countryCode",
+    "countryName",
+    "device",
+    "lastStatusTime",
+    "roaming"
+   ],
+   "note": ""
+  },
+  {
+   "key": "reachability",
+   "label": "Device Reachability Status (anlık)",
+   "role": "ulaşılabilirlik sorgusu",
+   "ok": true,
+   "status": "200",
+   "latency_ms": 267,
+   "fields": [
+    "connectivity",
+    "device",
+    "lastStatusTime",
+    "reachable"
+   ],
+   "note": ""
+  },
+  {
+   "key": "sim_swap_check",
+   "label": "SIM Swap check",
+   "role": "bütünlük kapısı",
+   "ok": true,
+   "status": "200",
+   "latency_ms": 264,
+   "fields": [
+    "swapped"
+   ],
+   "note": ""
+  },
+  {
+   "key": "sim_swap_date",
+   "label": "SIM Swap retrieve-date",
+   "role": "bütünlük kapısı (tarih)",
+   "ok": true,
+   "status": "200",
+   "latency_ms": 238,
+   "fields": [
+    "latestSimChange"
+   ],
+   "note": ""
+  },
+  {
+   "key": "location_verify",
+   "label": "Location Verification (Budapeşte, TRUE beklenir)",
+   "role": "buluşma noktası hükmü",
+   "ok": true,
+   "status": "200",
+   "latency_ms": 218,
+   "fields": [
+    "lastLocationTime",
+    "verificationResult"
+   ],
+   "note": ""
+  },
+  {
+   "key": "consent",
+   "label": "Consent Info (purpose=dpv:ServiceProvision)",
+   "role": "operatör rıza kontrolü",
+   "ok": true,
+   "status": "200",
+   "latency_ms": 250,
+   "fields": [
+    "statusInfo"
+   ],
+   "note": ""
+  },
+  {
+   "key": "number_verify",
+   "label": "Number Verification (cihaz token'ı olmadan)",
+   "role": "sürücü cihaz doğrulaması",
+   "ok": false,
+   "status": "auth 401",
+   "latency_ms": null,
+   "fields": [],
+   "note": "401 beklenir: gerçek çağrı sürücü cihazının 3-legged OIDC token'ı ile yapılır. [number-verification] auth (401): {\"detail\":\"Authorization header is missing\"}"
+  },
+  {
+   "key": "number_verify_oidc",
+   "label": "Number Verification OIDC keşfi (openid-configuration + client credentials)",
+   "role": "sürücü sayfasının operatöre yönlendirmesi",
+   "ok": true,
+   "status": "200",
+   "latency_ms": 354,
+   "fields": [
+    "authorization_host",
+    "scope",
+    "token_host"
+   ],
+   "note": ""
+  }
+ ],
+ "cleanup": []
+}

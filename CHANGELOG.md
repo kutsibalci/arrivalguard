@@ -14,7 +14,8 @@
 - **Nokia device-status subscriptions accept exactly one event type** (live 422, 09.09.2026). Every type now gets its
   own subscription: roaming-on, roaming-change-country, reachability-disconnected, reachability-data, plus 3 geofences.
   The simulator enforces the same rule.
-- **Consent Info `purpose` must be a DPV term** (`dpv:ServiceProvision`; live 422).
+- **Consent Info `purpose` must be a DPV term** (`dpv:ServiceProvision`; live 422), and `requestCaptureUrl` is required
+  (live 422, 27.09.2026; sent as `false`). The simulator enforces both.
 - **Time-based rules actually run.** A background scheduler ticks open cases. Scheduler ticks are only written to the
   audit when something changes. A persisting problem re-wakes the coordinator after `AG_REESCALATE_AFTER_MIN` at the earliest (budgeted).
 - **Missing arrival signal.** When the arrival window closes without a roaming event, the scheduler polls roaming once and
