@@ -409,3 +409,12 @@ def test_pages_health_and_security_headers(client):
         assert "frame-ancestors 'none'" in r.headers["content-security-policy"] and r.headers["x-frame-options"] == "DENY"
     assert client.get("/consent/x").headers["cache-control"] == "no-store"
     assert client.get("/").json()["scenarios"][0] == "happy-path"
+
+
+def test_subscription_ends_after_case_deleted_is_acknowledged(client):
+    """Vaka silinince Nokia `subscription-ends` gönderir; 404 yerine 200 dönülür ki Nokia tekrar denemesin."""
+    ends = ce("sub-gone", "org.camaraproject.geofencing-subscriptions.v0.subscription-ends", ce_id="gone")
+    r = client.post("/webhooks/geofence", json=ends, headers=AUTH)
+    assert r.status_code == 200 and r.json()["case_id"] is None
+    other = ce("sub-gone", GEOFENCE_ENTERED, ce_id="gone-2")
+    assert client.post("/webhooks/geofence", json=other, headers=AUTH).status_code == 404

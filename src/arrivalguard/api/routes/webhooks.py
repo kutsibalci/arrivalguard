@@ -33,14 +33,28 @@ def _prepare(ctx, ev, authorization: str | None, sink: str):
         raise HTTPException(400, {"code": "INVALID_ARGUMENT", "message": "CloudEvent bekleniyor (type zorunlu)"})
     data = ev.get("data") or {}
     case, target = ctx.resolve_webhook_case(data)
-    if case is None:
-        phone = (data.get("device") or {}).get("phoneNumber")
-        log.warning("webhook %s: eşleşmeyen abonelik sub=%s phone=%s", sink, data.get("subscriptionId"), mask_phone(phone) if phone else "-")
-        raise HTTPException(404, {"code": "UNKNOWN_SUBSCRIPTION", "message": "abonelik/vaka eşleşmedi"})
     at = _parse_time(ev.get("time"), ctx.now())
+    if case is None:
+        if str(ev["type"]).endswith(SUB_ENDS):
+            # Vaka kapanıp abonelikler silinince Nokia `subscription-ends` gönderir: yapılacak iş yok, 200 → tekrar denemesin
+            log.info("webhook %s: kapanmış aboneliğin subscription-ends olayı sub=%s", sink, data.get("subscriptionId"))
+            return None, "", data, at, False
+        phone = (data.get("device") or {}).get("phoneNumber")
+        log.warning("webhook %s: eşleşmeyen abonelik type=%s sub=%s phone=%s", sink, ev["type"], data.get("subscriptionId"),
+                    mask_phone(phone) if phone else "-")
+        raise HTTPException(404, {"code": "UNKNOWN_SUBSCRIPTION", "message": "abonelik/vaka eşleşmedi"})
     ce_id = ev.get("id")
     duplicate = bool(ce_id) and ctx.store.seen_event(f"{sink}:{ce_id}", ctx.now())
     return case, target, data, at, duplicate
+
+
+def _brief(data: dict) -> str:
+    """Olayın karar veren alanları — kişisel veri içermez (ülke kodu, ulaşılabilirlik, bölge)."""
+    keys = ("countryCode", "countryName", "roaming", "reachable", "connectivity", "reachabilityStatus", "area")
+    parts = [f"{k}={data[k]}" for k in keys if k in data and k != "area"]
+    if "area" in data:
+        parts.append("area=" + str((data.get("area") or {}).get("areaType")))
+    return (" " + " ".join(parts)) if parts else ""
 
 
 def _subscription_ended(ctx, case, target: str, at: datetime) -> dict:
@@ -53,9 +67,12 @@ def webhook_roaming(ev: dict = Body(...), authorization: str | None = Header(def
     """Device Roaming Status sink'i (roaming-on / roaming-change-country / roaming-off)."""
     with ctx.lock:
         case, target, data, at, dup = _prepare(ctx, ev, authorization, "roaming")
+        if case is None:
+            return {"ok": True, "handled": SUB_ENDS, "case_id": None}
         if dup:
             return {"ok": True, "duplicate": True}
         etype = ev["type"]
+        log.info("webhook roaming: case=%s type=%s%s", case.id, etype.rsplit(".", 1)[-1], _brief(data))
         if etype.endswith(SUB_ENDS):
             return _subscription_ended(ctx, case, "roaming", at)
         if etype.endswith("roaming-off"):
@@ -79,9 +96,12 @@ def webhook_geofence(ev: dict = Body(...), authorization: str | None = Header(de
     """Geofencing sink'i (area-entered / area-left). Bölge adı abonelik indeksinden çözülür."""
     with ctx.lock:
         case, zone, data, at, dup = _prepare(ctx, ev, authorization, "geofence")
+        if case is None:
+            return {"ok": True, "handled": SUB_ENDS, "case_id": None}
         if dup:
             return {"ok": True, "duplicate": True}
         etype = ev["type"]
+        log.info("webhook geofence: case=%s type=%s%s", case.id, etype.rsplit(".", 1)[-1], _brief(data))
         if etype.endswith(SUB_ENDS):
             return _subscription_ended(ctx, case, f"geofence:{zone}", at)
         if etype.endswith("area-entered"):
@@ -102,9 +122,12 @@ def webhook_reachability(ev: dict = Body(...), authorization: str | None = Heade
     """Device Reachability Status sink'i: reachability-disconnected → ulaşılamıyor; reachability-data/sms → ulaşılabilir."""
     with ctx.lock:
         case, _, data, at, dup = _prepare(ctx, ev, authorization, "reachability")
+        if case is None:
+            return {"ok": True, "handled": SUB_ENDS, "case_id": None}
         if dup:
             return {"ok": True, "duplicate": True}
         etype = ev["type"]
+        log.info("webhook reachability: case=%s type=%s%s", case.id, etype.rsplit(".", 1)[-1], _brief(data))
         if etype.endswith(SUB_ENDS):
             return _subscription_ended(ctx, case, "reachability", at)
         if etype.endswith("reachability-disconnected"):
