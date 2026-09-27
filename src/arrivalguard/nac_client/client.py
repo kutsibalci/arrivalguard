@@ -300,7 +300,9 @@ class NacClient:
         if max_events:
             body["config"]["subscriptionMaxEvents"] = max_events
         if sink_token:
-            body["sinkCredential"] = {"credentialType": "ACCESSTOKEN", "accessToken": sink_token, "accessTokenType": "bearer"}
+            # CAMARA AccessTokenCredential: accessTokenExpiresUtc zorunlu (canlı 422, 27.09.2026) → abonelik bitişi
+            body["sinkCredential"] = {"credentialType": "ACCESSTOKEN", "accessToken": sink_token, "accessTokenType": "bearer",
+                                      "accessTokenExpiresUtc": exp.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")}
         return body
 
     def geofence_subscribe(self, phone: str, lat: float, lng: float, radius_m: float, sink: str, *, types: list[str] | None = None, sink_token: str | None = None, expire: datetime | None = None, initial_event: bool = False) -> NacResult:

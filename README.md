@@ -104,8 +104,9 @@ See [docs/privacy.md](docs/privacy.md).
 This is a working prototype that passes its own tests. It is not a certified production system. Main gaps:
 - **Driver OIDC flow (live):** the driver page runs Number Verification's 3-legged OIDC flow (operator redirect →
   code → device token). It is tested against the simulator and a mocked Nokia, but not yet on a real phone on mobile data.
-- **Live event delivery:** geofencing events are not produced for Nokia's static simulated devices, and live
-  roaming/reachability webhooks need a public HTTPS sink. Both are unverified end to end.
+- **Live event delivery:** verified on 27.09.2026. Nokia accepted all 7 single-type subscriptions, delivered roaming
+  and reachability CloudEvents through a public HTTPS tunnel with the sink Bearer token, and the case agent processed them.
+  Geofencing events are still unverified because Nokia's simulated devices do not move.
 - **Single process:** one scheduler per deployment. SQLite suits a single node, not horizontal scaling.
 
 Full list: [CHANGELOG.md](CHANGELOG.md) and [docs/api-availability.md](docs/api-availability.md).

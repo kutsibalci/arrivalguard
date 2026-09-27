@@ -230,6 +230,11 @@ def _sub_routes(prefix: str, kind: str, single_type: bool):
         if single_type and len(body.get("types") or []) != 1:
             raise HTTPException(422, {"detail": [{"type": "value_error", "loc": ["body", "types"],
                                                   "msg": "Value error, types must be a list of length 1"}]})
+        cred = body.get("sinkCredential")
+        if cred and cred.get("credentialType") == "ACCESSTOKEN" and not cred.get("accessTokenExpiresUtc"):
+            # Nokia: ACCESSTOKEN kimliğinde son kullanma zamanı zorunlu (canlı 422, 27.09.2026)
+            raise HTTPException(422, {"detail": [{"type": "missing", "loc": ["body", "sinkCredential", "ACCESSTOKEN", "accessTokenExpiresUtc"],
+                                                  "msg": "Field required"}]})
         return fx.create_subscription(kind, body)
 
     @app.get(prefix, name=f"list_{kind}")

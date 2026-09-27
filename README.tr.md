@@ -45,7 +45,7 @@ Demo senaryoları ve sunum metni: [`docs/demo-script.md`](docs/demo-script.md). 
 Bu, testleri geçen çalışan bir prototip; sertifikalı bir üretim sistemi değil. Açık kalan konular:
 
 - **Sürücü OIDC akışı:** sürücü sayfası Number Verification'ın 3-legged OIDC akışını çalıştırıyor (operatöre yönlendirme → kod → cihaz token'ı). Simülatörde ve sahte Nokia ile test edildi; gerçek bir telefonda mobil veriyle henüz denenmedi.
-- **Canlı olay teslimatı:** Nokia'nın sabit simüle cihazları geofencing olayı üretmiyor. Canlı roaming ve reachability webhook'ları için public HTTPS sink gerekiyor.
+- **Canlı olay teslimatı:** 27.09.2026'da doğrulandı. Nokia 7 tek tipli aboneliğin hepsini kabul etti, roaming ve reachability olaylarını public HTTPS tünel üzerinden webhook anahtarıyla teslim etti, vaka ajanı da işledi. Geofencing olayı hâlâ doğrulanmadı, çünkü Nokia'nın simüle cihazları hareket etmiyor.
 - **Ölçeklenme:** tek süreçli zamanlayıcı ve SQLite ile tek düğüme uygun.
 
 Tam liste: [`CHANGELOG.md`](CHANGELOG.md).

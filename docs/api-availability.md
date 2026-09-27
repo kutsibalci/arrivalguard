@@ -6,9 +6,9 @@
 
 | API | Path | ArrivalGuard'daki rolü | Canlı sonuç (09.09 → 27.09.2026) | Durum / düzeltme |
 |---|---|---|---|---|
-| Device Roaming Status Subscriptions | `POST /device-status/device-roaming-status-subscriptions/v0.8/subscriptions`, `DELETE …/{id}` | **Ana tetikleyici** (`roaming-on`); aktarma bacağı için `roaming-change-country` | ⚠ 422 `types must be a list of length 1` | ✅ **Düzeltildi (0.2.0):** her olay tipi ayrı abonelik. Tek tipli gövde canlıda henüz denenmedi |
+| Device Roaming Status Subscriptions | `POST /device-status/device-roaming-status-subscriptions/v0.8/subscriptions`, `DELETE …/{id}` | **Ana tetikleyici** (`roaming-on`); aktarma bacağı için `roaming-change-country` | ⚠ 422 `types must be a list of length 1` | ✅ **Düzeltildi (0.2.0):** her olay tipi ayrı abonelik. Canlıda ✅ ACTIVE, olay teslim edildi (27.09) |
 | Device Roaming Status (anlık) | `POST /device-status/device-roaming-status/v1/retrieve` | `roaming-on` ülke taşımazsa tamamlar; varış penceresi kaçarsa yedek yol | ✅ 200 · 142 ms → ✅ 200 (27.09) | |
-| Device Reachability Status Subscriptions | `POST /device-status/device-reachability-status-subscriptions/v0.8/subscriptions` | Ulaşılamama olayı (`reachability-disconnected` / `-data`) | ⚠ 422 (aynı tek tip kuralı) | ✅ **Düzeltildi (0.2.0)**, canlıda henüz denenmedi |
+| Device Reachability Status Subscriptions | `POST /device-status/device-reachability-status-subscriptions/v0.8/subscriptions` | Ulaşılamama olayı (`reachability-disconnected` / `-data`) | ⚠ 422 (aynı tek tip kuralı) | ✅ **Düzeltildi (0.2.0)**. Canlıda ✅ ACTIVE, olay teslim edildi (27.09) |
 | Device Reachability Status (anlık) | `POST /device-status/device-reachability-status/v1/retrieve` | Olay verisi eksikse anlık sorgu | ✅ 200 · 145 ms → ✅ 200 (27.09) | |
 | SIM Swap | `POST passthrough/camara/v1/sim-swap/sim-swap/v0/check` (+ `/retrieve-date`) | **Bütünlük kapısı** (`maxAge` = `AG_SIM_SWAP_FREEZE_WINDOW_H`) | ✅ 200 · 141 ms / 130 ms → ✅ 200 (27.09) | Passthrough → `Authorization: Bearer` |
 | Number Verification | `POST passthrough/camara/v1/number-verification/number-verification/v2/verify` | **Sürücünün kendi cihazı** kayıtlı hatta mı | ⚠ 401 `Authorization header is missing` | Beklenen durum: çağrı cihazın 3-legged OIDC token'ıyla yapılır. Akış `nac_client/oidc.py`'de. OIDC keşfi (`/.well-known/openid-configuration` + client credentials) canlıda ✅ 200 (27.09); gerçek telefonla henüz denenmedi (bkz. [mimari §6](architecture.md#6-sürücü-doğrulama-iki-aşamalı-model)) |
@@ -31,8 +31,8 @@ Bilinçli olarak kullanılmayanlar:
 
 - [x] networkascode.nokia.io kaydı, SIMULATOR planı _(22.08.2026)_
 - [x] Okuma uçları canlıda 200 döndü: roaming, reachability, SIM Swap, Location Verification _(09.09.2026)_
-- [ ] Tek tipli roaming ve reachability abonelikleri canlıda `status=ACTIVE` dönüyor mu (`arrivalguard-probe --include-write --sink https://…`)
-- [ ] `roaming-on` CloudEvent'i public sink'e `Authorization: Bearer <WEBHOOK_TOKEN>` ile ulaştı mı
+- [x] Tek tipli roaming ve reachability abonelikleri canlıda `status=ACTIVE` _(27.09.2026; `sinkCredential.accessTokenExpiresUtc` zorunlu)_
+- [x] Roaming ve reachability CloudEvent'leri public sink'e `Authorization: Bearer <WEBHOOK_TOKEN>` ile ulaştı, vaka ajanı işledi _(27.09.2026)_
 - [x] Consent Info `dpv:ServiceProvision` + `requestCaptureUrl` ile 200 _(27.09.2026)_
 - [x] Number Verification OIDC keşfi canlıda 200 _(27.09.2026)_
 - [ ] Number Verification: sürücü cihazında OIDC akışıyla alınan token ile 200

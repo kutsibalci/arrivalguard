@@ -14,6 +14,9 @@
 - **Nokia device-status subscriptions accept exactly one event type** (live 422, 09.09.2026). Every type now gets its
   own subscription: roaming-on, roaming-change-country, reachability-disconnected, reachability-data, plus 3 geofences.
   The simulator enforces the same rule.
+- **Sink credentials carry an expiry.** Nokia requires `sinkCredential.accessTokenExpiresUtc` for `ACCESSTOKEN` (live 422,
+  27.09.2026); it is set to the subscription expiry. With this fix, live delivery was verified end to end: 7 subscriptions
+  ACTIVE, roaming and reachability CloudEvents delivered with the Bearer token and processed by the case agent.
 - **Consent Info `purpose` must be a DPV term** (`dpv:ServiceProvision`; live 422), and `requestCaptureUrl` is required
   (live 422, 27.09.2026; sent as `false`). The simulator enforces both.
 - **Time-based rules actually run.** A background scheduler ticks open cases. Scheduler ticks are only written to the

@@ -181,3 +181,16 @@ def test_breaker_half_open_allows_single_trial():
     assert b.snapshot()["api"]["open"] is False
     b.reset()
     assert b.snapshot() == {}
+
+
+def test_sink_credential_carries_expiry_and_simulator_enforces_it():
+    """Nokia ACCESSTOKEN sinkCredential'da accessTokenExpiresUtc ister (canlı 422, 27.09.2026)."""
+    c, sim = _sim_client()
+    exp = datetime(2026, 8, 17, 9, 0, tzinfo=timezone.utc)
+    r = c.roaming_subscribe("+447700900201", "https://ag.test/webhooks/roaming", ROAMING_ON, sink_token="s", expire=exp)
+    assert r.data["id"]
+    body = c._sub_body("+447700900201", "https://x", [ROAMING_ON], "s", exp)
+    assert body["sinkCredential"]["accessTokenExpiresUtc"] == "2026-08-17T09:00:00Z"
+    del body["sinkCredential"]["accessTokenExpiresUtc"]
+    raw = TestClient(sim.app).post("/device-status/device-roaming-status-subscriptions/v0.8/subscriptions", json=body)
+    assert raw.status_code == 422
